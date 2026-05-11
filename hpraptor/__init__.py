@@ -60,7 +60,15 @@ from .hybrid_energy import (
     power_vertical_descent,
 )
 
-__version__ = "0.1.0"
+from .visualization import (
+    plot_mission_dashboard, plot_power_split_timeline,
+    plot_soc_fuel_trace, plot_propulsion_mode_gantt,
+    plot_architecture_comparison, plot_mass_breakdown,
+    plot_segment_energy_breakdown, plot_efficiency_vs_power,
+    plot_all,
+)
+
+__version__ = "0.2.0"
 __all__ = [
     # Atmosphere
     "isa_density", "isa_temperature", "isa_pressure", "isa_speed_of_sound",
