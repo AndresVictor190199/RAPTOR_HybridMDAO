@@ -32,10 +32,10 @@ try:
 except ImportError:
     HAS_MPL = False
 
-from .hybrid_energy import HybridMissionResult, HybridSegmentResult
-from .battery_model import BatteryState
-from .fuel_model import FuelState
-from .vehicles import HybridVTOLConfig
+from hpraptor.m4_propulsion.hybrid_energy import HybridMissionResult, HybridSegmentResult
+from hpraptor.m4_propulsion.battery_model import BatteryState
+from hpraptor.m4_propulsion.fuel_model import FuelState
+from hpraptor.m4_propulsion.vehicles import HybridVTOLConfig
 
 
 # ═══════════════════════════════════════════════════════════════════════════

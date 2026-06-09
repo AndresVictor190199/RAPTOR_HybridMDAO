@@ -1,0 +1,27 @@
+# configs/quito_mission.yaml
+mission:
+  name: "Quito Valley Corridor Hospital-to-Hospital Transit"
+  description: "Mountainous flight corridor from H. Enrique Garcés to H. Metropolitano in Quito, Ecuador."
+  origin:
+    name: "Hospital Enrique Garces"
+    latitude: -0.2444
+    longitude: -78.5411
+    altitude_amsl: 3009.0
+  destination:
+    name: "Hospital Metropolitano"
+    latitude: -0.1844
+    longitude: -78.5037
+    altitude_amsl: 2838.0
+  corridor:
+    lat_min: -0.25
+    lat_max: -0.18
+    lon_min: -78.55
+    lon_max: -78.50
+  constraints:
+    min_terrain_clearance: 50.0  # m AGL
+    min_cruise_terrain_clearance: 100.0  # m AGL
+    min_battery_soc: 0.15
+    min_fuel_reserve: 0.10
+  wind:
+    headwind_speed: 5.0  # m/s
+    wind_direction_deg: 45.0  # deg

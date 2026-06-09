@@ -26,14 +26,14 @@ from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 import numpy as np
 
-from .config import UAVConfig, MissionConstraints
+from hpraptor.core.config import UAVConfig, MissionConstraints
 from .dem import DEMInterface
-from .segments import (
+from hpraptor.core.segments import (
     SegmentType, FlightSegment,
     VTOLAscend, VTOLDescend, FWClimb, FWDescend, FWCruise, Transition,
     SegmentState
 )
-from .path import FlightPath
+from hpraptor.core.path import FlightPath
 from .terrain import TerrainAnalyzer
 
 

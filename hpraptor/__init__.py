@@ -20,38 +20,38 @@ Primary mission: Long-endurance loiter
 Author: Victor (LUAS-EPN / KU Leuven)
 """
 
-from .atmosphere import isa_density, isa_temperature, isa_pressure, isa_speed_of_sound
-from .config import (
+from .core.atmosphere import isa_density, isa_temperature, isa_pressure, isa_speed_of_sound
+from .core.config import (
     UAVConfig, MissionConstraints,
     PropulsionArchitecture, PropulsionMode,
 )
-from .segments import (
+from .core.segments import (
     SegmentType, FlightSegment,
     VTOLAscend, VTOLDescend,
     FWClimb, FWDescend, FWCruise,
     Transition,
 )
-from .path import FlightPath, Waypoint, PathMetrics
-from .propulsion_system import (
+from .core.path import FlightPath, Waypoint, PathMetrics
+from .m4_propulsion.propulsion_system import (
     ElectricMotorParams, ICEngineParams, GeneratorParams,
     FuelCellParams, GasTurbineParams, PropellerParams,
     PropulsionSystem,
 )
-from .battery_model import (
+from .m4_propulsion.battery_model import (
     BatteryParams, BatteryModel, BatteryState,
     CellChemistry,
 )
-from .fuel_model import (
+from .m4_propulsion.fuel_model import (
     FuelTankParams, FuelModel, FuelState, FuelType,
 )
-from .vehicles import (
+from .m4_propulsion.vehicles import (
     HybridVTOLConfig,
     get_vehicle, list_vehicle_configs, VEHICLE_CONFIGS,
-    series_hybrid_config, parallel_hybrid_config,
+    all_electric_config, series_hybrid_config, parallel_hybrid_config,
     series_parallel_config, turbo_electric_config,
     fuel_cell_hybrid_config,
 )
-from .hybrid_energy import (
+from .m4_propulsion.hybrid_energy import (
     HybridEnergyManager,
     HybridSegmentResult, HybridMissionResult,
     compute_segment_power,
@@ -60,7 +60,7 @@ from .hybrid_energy import (
     power_vertical_descent,
 )
 
-from .visualization import (
+from .postprocessing.visualization import (
     plot_mission_dashboard, plot_power_split_timeline,
     plot_soc_fuel_trace, plot_propulsion_mode_gantt,
     plot_architecture_comparison, plot_mass_breakdown,

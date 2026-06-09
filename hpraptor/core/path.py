@@ -117,7 +117,7 @@ class FlightPath:
         self._segments: List[FlightSegment] = []
 
         # Compute bearing from origin to destination
-        from .dem import DEMInterface
+        from hpraptor.m1_mission.dem import DEMInterface
         self._nominal_bearing = DEMInterface.bearing(
             origin_lat, origin_lon, destination_lat, destination_lon
         )

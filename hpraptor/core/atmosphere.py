@@ -29,7 +29,13 @@ _LAPSE = -0.0065   # temperature lapse rate in troposphere [K/m]
 
 def isa_temperature(altitude_m: float) -> float:
     """ISA temperature at altitude [K]."""
-    return _T0 + _LAPSE * altitude_m
+    if hasattr(altitude_m, 'is_symbolic') or 'casadi' in str(type(altitude_m)):
+        import casadi as ca
+        # Smooth twice-differentiable approximation of max(_T0 + _LAPSE * altitude_m, 200.0) to avoid Hessian NaNs
+        T_raw = _T0 + _LAPSE * altitude_m
+        return 0.5 * (T_raw + 200.0 + ca.sqrt((T_raw - 200.0) ** 2 + 0.01))
+    else:
+        return max(_T0 + _LAPSE * altitude_m, 200.0)
 
 
 def isa_pressure(altitude_m: float) -> float:

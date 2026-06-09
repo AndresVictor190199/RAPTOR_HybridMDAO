@@ -32,7 +32,7 @@ from typing import Optional, Dict, Tuple
 from enum import Enum
 import numpy as np
 
-from .atmosphere import isa_density, isa_temperature
+from hpraptor.core.atmosphere import isa_density, isa_temperature
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -131,7 +131,7 @@ class ICEngineParams:
             self.mass = self.P_max_sl / self.specific_power
         # Willans line coefficients
         self._a = self.idle_fuel_frac * self.BSFC_rated * self.P_max_sl / (1e6 * 3600)
-        self._b = self.BSFC_rated / (1e3 * 3600)  # g/kWh → kg/(W·s)
+        self._b = self.BSFC_rated / (1e6 * 3600)  # g/kWh → kg/(W·s)
 
     def max_power_at_altitude(self, altitude_m: float) -> float:
         """Maximum available power at altitude [W]."""
@@ -440,14 +440,29 @@ class PropulsionSystem:
     def total_mass(self) -> float:
         """Total propulsion system dry mass [kg]."""
         m = self.motor.mass
-        if self.ice:
-            m += self.ice.mass
-        if self.generator:
-            m += self.generator.mass
-        if self.fuel_cell:
-            m += self.fuel_cell.mass
-        if self.gas_turbine:
-            m += self.gas_turbine.mass
+        if self.architecture == "all_electric":
+            pass
+        elif self.architecture == "series":
+            if self.ice:
+                m += self.ice.mass
+            if self.generator:
+                m += self.generator.mass
+        elif self.architecture == "parallel":
+            if self.ice:
+                m += self.ice.mass
+        elif self.architecture == "series_parallel":
+            if self.ice:
+                m += self.ice.mass
+            if self.generator:
+                m += self.generator.mass
+        elif self.architecture == "turbo_electric":
+            if self.gas_turbine:
+                m += self.gas_turbine.mass
+            if self.generator:
+                m += self.generator.mass
+        elif self.architecture == "fuel_cell":
+            if self.fuel_cell:
+                m += self.fuel_cell.mass
         return m
 
     def compute_power_split(
@@ -491,8 +506,8 @@ class PropulsionSystem:
                 P_gen_shaft = self.generator.shaft_power_required(P_fuel_mech)
                 fuel_flow = self.ice.fuel_flow_rate(P_gen_shaft, altitude_m)
                 heat_fuel = self.ice.heat_rejection(P_gen_shaft, altitude_m)
-                P_gen_elec = P_fuel_mech  # This goes to motor via bus
-                P_elec_bus += self.motor.electrical_power(P_fuel_mech)
+                P_gen_elec = P_fuel_mech  # Generator electrical output
+                P_elec_bus += self.motor.electrical_power(P_fuel_mech) - P_gen_elec
 
         elif self.architecture == "parallel":
             # In parallel: ICE and motor both on same shaft
@@ -512,17 +527,19 @@ class PropulsionSystem:
                 P_gen_shaft = self.generator.shaft_power_required(P_fuel_mech)
                 fuel_flow = self.gas_turbine.fuel_flow_rate(P_gen_shaft, altitude_m)
                 heat_fuel = P_gen_shaft - P_fuel_mech  # Generator losses
-                P_elec_bus += self.motor.electrical_power(P_fuel_mech)
+                P_gen_elec = P_fuel_mech
+                P_elec_bus += self.motor.electrical_power(P_fuel_mech) - P_gen_elec
 
         elif self.architecture == "fuel_cell":
             # Fuel cell: H₂ → FC → electrical bus
             if P_fuel_mech > 0 and self.fuel_cell:
-                # FC provides electrical power directly
+                # FC provides electrical power directly, offsetting battery draw
                 P_fc_elec = self.motor.electrical_power(P_fuel_mech)
                 fuel_flow = self.fuel_cell.h2_consumption_rate(P_fc_elec)
                 eta_fc = self.fuel_cell.system_efficiency(P_fc_elec)
                 heat_fuel = P_fc_elec * (1.0 / eta_fc - 1.0) if eta_fc > 0 else 0.0
-                P_elec_bus += P_fc_elec
+                # Net battery draw does not increase because the FC supplies P_fc_elec
+                # so we do not add P_fc_elec to P_elec_bus. Battery only supplies P_elec_mech.
 
         # Total efficiency
         P_fuel_chem = fuel_flow * (self.ice.fuel_lhv if self.ice else 43e6) if fuel_flow > 0 else 0.0

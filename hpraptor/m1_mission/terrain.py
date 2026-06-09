@@ -13,8 +13,8 @@ from typing import List, Tuple, Optional
 import numpy as np
 
 from .dem import DEMInterface
-from .path import FlightPath, Waypoint
-from .config import MissionConstraints
+from hpraptor.core.path import FlightPath, Waypoint
+from hpraptor.core.config import MissionConstraints
 
 
 @dataclass

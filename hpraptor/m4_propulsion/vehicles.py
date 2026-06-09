@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 import numpy as np
 
-from .atmosphere import isa_density
-from .config import PropulsionArchitecture
+from hpraptor.core.atmosphere import isa_density
+from hpraptor.core.config import PropulsionArchitecture
 from .propulsion_system import (
     ElectricMotorParams, ICEngineParams, GeneratorParams,
     FuelCellParams, GasTurbineParams, PropellerParams,
@@ -178,94 +178,117 @@ class HybridVTOLConfig:
 
 def series_hybrid_config(m_tow: float = 50.0) -> HybridVTOLConfig:
     """Series hybrid: ICE → Generator → Battery → Motor → Prop."""
-    motor = ElectricMotorParams(P_max=15000, eta_max=0.93)
-    ice = ICEngineParams(P_max_sl=12000, BSFC_rated=300)
-    gen = GeneratorParams(P_max=10000, eta_rated=0.90)
-    prop = PropellerParams(diameter=0.8)
+    scale = m_tow / 50.0
+    motor = ElectricMotorParams(P_max=15000.0 * scale, eta_max=0.93)
+    ice = ICEngineParams(P_max_sl=12000.0 * scale, BSFC_rated=300)
+    gen = GeneratorParams(P_max=10000.0 * scale, eta_rated=0.90)
+    prop = PropellerParams(diameter=0.8 * (scale ** 0.33))
     ps = PropulsionSystem("series", motor=motor, ice=ice, generator=gen, propeller_fw=prop)
-    bat = BatteryParams(chemistry=CellChemistry.LIPO, mass=5.0, n_series=12, n_parallel=2)
-    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=5.0)
+    bat = BatteryParams(chemistry=CellChemistry.LIPO, mass=5.0 * scale, n_series=12, n_parallel=2)
+    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=5.0 * scale)
     return HybridVTOLConfig(
-        name="Series Hybrid 50kg",
+        name=f"Series Hybrid {m_tow:.1f}kg",
         architecture=PropulsionArchitecture.SERIES,
-        m_tow=m_tow, m_empty=20.0,
-        S_ref=1.2, AR=10, C_L_max=1.6,
+        m_tow=m_tow, m_empty=0.4 * m_tow,
+        S_ref=1.2 * scale, AR=10, C_L_max=1.6,
         propulsion=ps, battery=bat, fuel_tank=fuel,
     )
 
 
 def parallel_hybrid_config(m_tow: float = 75.0) -> HybridVTOLConfig:
     """Parallel hybrid: ICE + Motor → shared shaft."""
-    motor = ElectricMotorParams(P_max=20000, eta_max=0.92)
-    ice = ICEngineParams(P_max_sl=25000, BSFC_rated=280)
-    prop = PropellerParams(diameter=1.0)
+    scale = m_tow / 75.0
+    motor = ElectricMotorParams(P_max=20000.0 * scale, eta_max=0.92)
+    ice = ICEngineParams(P_max_sl=25000.0 * scale, BSFC_rated=280)
+    prop = PropellerParams(diameter=1.0 * (scale ** 0.33))
     ps = PropulsionSystem("parallel", motor=motor, ice=ice, propeller_fw=prop)
-    bat = BatteryParams(chemistry=CellChemistry.LI_ION_NMC, mass=8.0, n_series=14, n_parallel=3)
-    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=8.0)
+    bat = BatteryParams(chemistry=CellChemistry.LI_ION_NMC, mass=8.0 * scale, n_series=14, n_parallel=3)
+    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=8.0 * scale)
     return HybridVTOLConfig(
-        name="Parallel Hybrid 75kg",
+        name=f"Parallel Hybrid {m_tow:.1f}kg",
         architecture=PropulsionArchitecture.PARALLEL,
-        m_tow=m_tow, m_empty=30.0,
-        S_ref=1.8, AR=9, C_L_max=1.5,
+        m_tow=m_tow, m_empty=0.4 * m_tow,
+        S_ref=1.8 * scale, AR=9, C_L_max=1.5,
         propulsion=ps, battery=bat, fuel_tank=fuel,
     )
 
 
 def fuel_cell_hybrid_config(m_tow: float = 40.0) -> HybridVTOLConfig:
     """Fuel cell hybrid: H₂ FC → Battery → Motor."""
-    motor = ElectricMotorParams(P_max=12000, eta_max=0.94)
-    fc = FuelCellParams(P_max=8000, n_cells=60)
-    prop = PropellerParams(diameter=0.7)
+    scale = m_tow / 40.0
+    motor = ElectricMotorParams(P_max=12000.0 * scale, eta_max=0.94)
+    fc = FuelCellParams(P_max=8000.0 * scale, n_cells=60)
+    prop = PropellerParams(diameter=0.7 * (scale ** 0.33))
     ps = PropulsionSystem("fuel_cell", motor=motor, fuel_cell=fc, ice=None, generator=None, propeller_fw=prop)
-    bat = BatteryParams(chemistry=CellChemistry.LIPO, mass=3.0, n_series=12, n_parallel=1)
-    fuel = FuelTankParams(FuelType.HYDROGEN_GAS, fuel_mass_max=1.0)
+    bat = BatteryParams(chemistry=CellChemistry.LIPO, mass=3.0 * scale, n_series=12, n_parallel=1)
+    fuel = FuelTankParams(FuelType.HYDROGEN_GAS, fuel_mass_max=1.0 * scale)
     return HybridVTOLConfig(
-        name="Fuel Cell Hybrid 40kg",
+        name=f"Fuel Cell Hybrid {m_tow:.1f}kg",
         architecture=PropulsionArchitecture.FUEL_CELL,
-        m_tow=m_tow, m_empty=18.0,
-        S_ref=1.0, AR=12, C_L_max=1.7,
+        m_tow=m_tow, m_empty=0.45 * m_tow,
+        S_ref=1.0 * scale, AR=12, C_L_max=1.7,
         propulsion=ps, battery=bat, fuel_tank=fuel,
     )
 
 
 def turbo_electric_config(m_tow: float = 200.0) -> HybridVTOLConfig:
     """Turbo-electric: Gas turbine → Generator → Motor."""
-    motor = ElectricMotorParams(P_max=60000, eta_max=0.95, specific_power=6000)
-    gt = GasTurbineParams(P_max_sl=80000, SFC_design=320)
-    gen = GeneratorParams(P_max=70000, eta_rated=0.92, specific_power=5000)
-    prop = PropellerParams(diameter=1.5)
+    scale = m_tow / 200.0
+    motor = ElectricMotorParams(P_max=60000.0 * scale, eta_max=0.95, specific_power=6000)
+    gt = GasTurbineParams(P_max_sl=80000.0 * scale, SFC_design=320)
+    gen = GeneratorParams(P_max=70000.0 * scale, eta_rated=0.92, specific_power=5000)
+    prop = PropellerParams(diameter=1.5 * (scale ** 0.33))
     ps = PropulsionSystem("turbo_electric", motor=motor, gas_turbine=gt, generator=gen,
                           ice=None, propeller_fw=prop)
-    bat = BatteryParams(chemistry=CellChemistry.LI_ION_NMC, mass=15.0, n_series=20, n_parallel=4)
-    fuel = FuelTankParams(FuelType.JET_A, fuel_mass_max=25.0)
+    bat = BatteryParams(chemistry=CellChemistry.LI_ION_NMC, mass=15.0 * scale, n_series=20, n_parallel=4)
+    fuel = FuelTankParams(FuelType.JET_A, fuel_mass_max=25.0 * scale)
     return HybridVTOLConfig(
-        name="Turbo-Electric 200kg",
+        name=f"Turbo-Electric {m_tow:.1f}kg",
         architecture=PropulsionArchitecture.TURBO_ELECTRIC,
-        m_tow=m_tow, m_empty=80.0,
-        S_ref=3.5, AR=8, C_L_max=1.4,
+        m_tow=m_tow, m_empty=0.4 * m_tow,
+        S_ref=3.5 * scale, AR=8, C_L_max=1.4,
         propulsion=ps, battery=bat, fuel_tank=fuel,
     )
 
 
 def series_parallel_config(m_tow: float = 100.0) -> HybridVTOLConfig:
     """Series-Parallel hybrid: ICE can drive shaft AND charge."""
-    motor = ElectricMotorParams(P_max=30000, eta_max=0.93)
-    ice = ICEngineParams(P_max_sl=35000, BSFC_rated=270)
-    gen = GeneratorParams(P_max=20000, eta_rated=0.91)
-    prop = PropellerParams(diameter=1.1)
+    scale = m_tow / 100.0
+    motor = ElectricMotorParams(P_max=30000.0 * scale, eta_max=0.93)
+    ice = ICEngineParams(P_max_sl=35000.0 * scale, BSFC_rated=270)
+    gen = GeneratorParams(P_max=20000.0 * scale, eta_rated=0.91)
+    prop = PropellerParams(diameter=1.1 * (scale ** 0.33))
     ps = PropulsionSystem("series_parallel", motor=motor, ice=ice, generator=gen, propeller_fw=prop)
-    bat = BatteryParams(chemistry=CellChemistry.LI_ION_NMC, mass=10.0, n_series=14, n_parallel=3)
-    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=10.0)
+    bat = BatteryParams(chemistry=CellChemistry.LI_ION_NMC, mass=10.0 * scale, n_series=14, n_parallel=3)
+    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=10.0 * scale)
     return HybridVTOLConfig(
-        name="Series-Parallel 100kg",
+        name=f"Series-Parallel {m_tow:.1f}kg",
         architecture=PropulsionArchitecture.SERIES_PARALLEL,
-        m_tow=m_tow, m_empty=40.0,
-        S_ref=2.2, AR=9.5, C_L_max=1.5,
+        m_tow=m_tow, m_empty=0.4 * m_tow,
+        S_ref=2.2 * scale, AR=9.5, C_L_max=1.5,
+        propulsion=ps, battery=bat, fuel_tank=fuel,
+    )
+
+
+def all_electric_config(m_tow: float = 25.0) -> HybridVTOLConfig:
+    """All-Electric: Battery -> Motor -> Prop (No fuel)."""
+    scale = m_tow / 25.0
+    motor = ElectricMotorParams(P_max=10000.0 * scale, eta_max=0.94)
+    prop = PropellerParams(diameter=0.8 * (scale ** 0.33))
+    ps = PropulsionSystem("all_electric", motor=motor, ice=None, generator=None, propeller_fw=prop)
+    bat = BatteryParams(chemistry=CellChemistry.LIPO, mass=8.0 * scale, n_series=12, n_parallel=3)
+    fuel = FuelTankParams(FuelType.GASOLINE, fuel_mass_max=0.0)
+    return HybridVTOLConfig(
+        name=f"All-Electric {m_tow:.1f}kg",
+        architecture=PropulsionArchitecture.ALL_ELECTRIC,
+        m_tow=m_tow, m_empty=0.4 * m_tow,
+        S_ref=0.8 * scale, AR=10, C_L_max=1.6,
         propulsion=ps, battery=bat, fuel_tank=fuel,
     )
 
 
 VEHICLE_CONFIGS = {
+    'all_electric': all_electric_config,
     'series_hybrid': series_hybrid_config,
     'parallel_hybrid': parallel_hybrid_config,
     'series_parallel': series_parallel_config,

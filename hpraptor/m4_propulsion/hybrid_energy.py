@@ -3,7 +3,7 @@ Hybrid Energy Manager — Multi-Source Power & Energy for VTOL UAVs
 ==================================================================
 
 Replaces RAPTOR's energy.py with a hybrid-aware energy analysis
-pipeline that handles:
+pipeline that handles:n    
     1. Aerodynamic power required (7 flight phase equations)
     2. Optimal power split: electric vs. fuel-based
     3. Simultaneous battery SOC and fuel mass tracking
@@ -27,11 +27,11 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 import numpy as np
 
-from .atmosphere import isa_density
+from hpraptor.core.atmosphere import isa_density
 from .vehicles import HybridVTOLConfig
 from .battery_model import BatteryModel, BatteryParams
-from .fuel_model import FuelModel, FuelTankParams
-from .config import PropulsionMode
+from .fuel_model import FuelTankParams, FuelType, FuelModel, FuelState
+from hpraptor.core.config import PropulsionMode
 
 
 # ═════════════════════════════════════════════════════════════════════════════

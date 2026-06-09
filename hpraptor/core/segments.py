@@ -372,7 +372,7 @@ class Transition(FlightSegment):
     def _compute_end_state(self) -> SegmentState:
         s = self._start_state
         k = self._compute_kinematics()
-        from .dem import DEMInterface
+        from hpraptor.m1_mission.dem import DEMInterface
         new_lat, new_lon = DEMInterface.destination_point(
             s.lat, s.lon, s.bearing, k.ground_distance
         )
@@ -446,7 +446,7 @@ class FWClimb(FlightSegment):
     def _compute_end_state(self) -> SegmentState:
         s = self._start_state
         k = self._compute_kinematics()
-        from .dem import DEMInterface
+        from hpraptor.m1_mission.dem import DEMInterface
         new_lat, new_lon = DEMInterface.destination_point(
             s.lat, s.lon, s.bearing, k.ground_distance
         )
@@ -517,7 +517,7 @@ class FWDescend(FlightSegment):
     def _compute_end_state(self) -> SegmentState:
         s = self._start_state
         k = self._compute_kinematics()
-        from .dem import DEMInterface
+        from hpraptor.m1_mission.dem import DEMInterface
         new_lat, new_lon = DEMInterface.destination_point(
             s.lat, s.lon, s.bearing, k.ground_distance
         )
@@ -579,7 +579,7 @@ class FWCruise(FlightSegment):
     def _compute_end_state(self) -> SegmentState:
         s = self._start_state
         k = self._compute_kinematics()
-        from .dem import DEMInterface
+        from hpraptor.m1_mission.dem import DEMInterface
         new_lat, new_lon = DEMInterface.destination_point(
             s.lat, s.lon, s.bearing, k.ground_distance
         )

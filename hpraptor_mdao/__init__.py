@@ -45,7 +45,7 @@ except ImportError:
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from hpraptor.atmosphere import isa_density
+from hpraptor.core.atmosphere import isa_density
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -88,7 +88,7 @@ class AerodynamicsComp(om.ExplicitComponent):
         V = inputs['V_cruise']
         alt = inputs['altitude']
 
-        rho = isa_density(float(alt))
+        rho = isa_density(float(alt[0]))
         q = 0.5 * rho * V**2
 
         C_L = W / (q * S)
@@ -428,7 +428,7 @@ def run_mdao_sizing(design_vars: dict = None, print_results: bool = True) -> dic
         print(f"  Fuel used frac:    {prob.get_val('fuel_used_frac')[0]*100:.1f}%")
         print("=" * 60)
 
-    return {k: float(prob.get_val(k)) for k in [
+    return {k: float(prob.get_val(k)[0]) for k in [
         'm_total', 'W_total', 'm_propulsion', 'm_battery', 'm_fuel_system',
         'L_D', 'D_cruise', 'P_cruise_aero', 'eta_cruise_overall',
         'fuel_flow_cruise', 'range_km', 'endurance_hr', 'SOC_final', 'fuel_used_frac',

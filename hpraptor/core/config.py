@@ -25,6 +25,7 @@ import numpy as np
 
 class PropulsionArchitecture(Enum):
     """Hybrid propulsion architecture type."""
+    ALL_ELECTRIC = "all_electric"   # Battery → Motor → Prop (No fuel)
     SERIES = "series"               # ICE → Generator → Battery → Motor → Prop
     PARALLEL = "parallel"           # ICE + Motor → shared shaft
     SERIES_PARALLEL = "series_parallel"  # ICE split: mechanical + electrical path
