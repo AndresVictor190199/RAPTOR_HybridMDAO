@@ -16,9 +16,9 @@ if os.path.exists(os.path.join(here, "README.md")):
 
 setup(
     name="hpraptor",
-    version="0.1.0",
-    author="Victor Alulema",
-    author_email="victor.alulema@epn.edu.ec",
+    version="0.3.0",
+    author="Victor Berrazueta",
+    author_email="victor.berrazueta@epn.edu.ec",
     description=(
         "Energy optimization for hybrid propulsion systems "
         "in Transition VTOL UAVs — built on the RAPTOR framework."
@@ -33,6 +33,9 @@ setup(
         "numpy>=1.21",
         "scipy>=1.7",
         "matplotlib>=3.5",
+        "pyyaml>=6.0",
+        "requests>=2.25",
+        "aerosandbox>=4.2",
     ],
     extras_require={
         "mdao": ["openmdao>=3.30"],
@@ -57,7 +60,10 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "hpraptor-sweep=scripts.run_config_sweep:main",
+            "hpraptor-run=run_mission:main",
+            "hpraptor-mdao=hpraptor_mdao.run:main",
+            "hpraptor-dem=hpraptor.m1_mission.srtm_downloader:main",
+            "hpraptor-3d=hpraptor.postprocessing.trajectory_3d:main",
         ],
     },
 )
