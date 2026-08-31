@@ -5,7 +5,7 @@ Unit Tests for BEMT Solver
 
 import pytest
 import numpy as np
-from hpraptor.m4_propulsion.bemt import BEMTSolver
+from hpraptor.m5_propulsion.bemt import BEMTSolver
 
 
 def test_bemt_static():

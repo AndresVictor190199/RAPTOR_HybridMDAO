@@ -1,78 +1,83 @@
 """
-Demo: OpenMDAO MDAO Sizing for Hybrid VTOL
-============================================
+Demo: OpenMDAO MDO for the hybrid VTOL, with continuous architecture relaxation.
 
-Runs the coupled MDAO sizing problem for different configurations
-and compares the results.
-
-Requires: pip install openmdao
+Runs the relaxed optimization (architecture as a design variable) and
+each pinned-architecture baseline, then compares them — the validation
+that the relaxation recovers the best discrete architecture without
+enumerating them.
 
 Usage:
     python -m examples.demo_mdao
+    python -m examples.demo_mdao --n2       # also write reports/mdao_n2.html
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import argparse
+import os
+import sys
 
-try:
-    from hpraptor_mdao import run_mdao_sizing, HAS_OPENMDAO
-except ImportError:
-    HAS_OPENMDAO = False
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from hpraptor_mdao import HAS_OPENMDAO
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--n2", action="store_true",
+                        help="Write the N2 coupling diagram to reports/mdao_n2.html")
+    parser.add_argument("--penalty", type=float, default=200.0,
+                        help="Discreteness penalty weight lambda [Wh]")
+    args = parser.parse_args()
+
     if not HAS_OPENMDAO:
         print("OpenMDAO not installed. Install with: pip install openmdao")
-        print("Then re-run this demo.")
         return
 
-    print("=" * 70)
-    print("MDAO HYBRID VTOL SIZING COMPARISON")
-    print("=" * 70)
+    import openmdao.api as om
+    from hpraptor_mdao import build_problem, run_optimization, ARCH_NAMES
 
-    configs = {
-        "Small Series (25kg)": {
-            'm_empty': 10.0, 'P_motor_max': 8000.0, 'P_ice_max': 6000.0,
-            'E_battery_wh': 500.0, 'm_fuel': 2.0, 'm_payload': 3.0,
-            'S_ref': 0.8, 'AR': 10.0, 'k_electric_cruise': 0.3,
-        },
-        "Medium Series (50kg)": {
-            'm_empty': 20.0, 'P_motor_max': 15000.0, 'P_ice_max': 12000.0,
-            'E_battery_wh': 1000.0, 'm_fuel': 5.0, 'm_payload': 5.0,
-            'S_ref': 1.5, 'AR': 10.0, 'k_electric_cruise': 0.2,
-        },
-        "Large Series (100kg)": {
-            'm_empty': 40.0, 'P_motor_max': 30000.0, 'P_ice_max': 25000.0,
-            'E_battery_wh': 2000.0, 'm_fuel': 10.0, 'm_payload': 10.0,
-            'S_ref': 2.5, 'AR': 9.0, 'k_electric_cruise': 0.15,
-        },
-        "Heavy Series (200kg)": {
-            'm_empty': 80.0, 'P_motor_max': 60000.0, 'P_ice_max': 50000.0,
-            'E_battery_wh': 5000.0, 'm_fuel': 20.0, 'm_payload': 20.0,
-            'S_ref': 4.0, 'AR': 8.0, 'k_electric_cruise': 0.1,
-        },
-    }
+    if args.n2:
+        os.makedirs("reports", exist_ok=True)
+        prob = build_problem()
+        prob.final_setup()
+        om.n2(prob, outfile="reports/mdao_n2.html", show_browser=False)
+        print("Wrote reports/mdao_n2.html\n")
 
-    results = {}
-    for name, dvs in configs.items():
-        print(f"\n--- {name} ---")
-        try:
-            results[name] = run_mdao_sizing(design_vars=dvs, print_results=True)
-        except Exception as e:
-            print(f"  ERROR: {e}")
+    print("=" * 78)
+    print("DISCRETE BASELINES (architecture pinned)")
+    print("=" * 78)
+    print(f"{'architecture':<18s} | {'energy [Wh]':>11s} | {'MTOW [kg]':>9s} | "
+          f"{'S_ref [m2]':>10s} | {'L/D':>5s}")
+    print("-" * 78)
 
-    # Summary table
-    if results:
-        print("\n\n" + "=" * 90)
-        print(f"{'Config':<25s} | {'MTOW':>6s} | {'Range':>8s} | {'Endur':>7s} | "
-              f"{'L/D':>5s} | {'eta':>6s} | {'SOC%':>5s}")
-        print("-" * 90)
-        for name, r in results.items():
-            print(f"{name:<25s} | {r['m_total']:6.1f} | "
-                  f"{r['range_km']:8.1f} | {r['endurance_hr']:7.2f} | "
-                  f"{r['L_D']:5.1f} | {r['eta_cruise_overall']:6.3f} | "
-                  f"{r['SOC_final']*100:5.1f}")
-        print("=" * 90)
+    discrete = {}
+    for arch in ARCH_NAMES:
+        r = run_optimization(build_problem(fixed_architecture=arch,
+                                           penalty_scale=args.penalty),
+                             verbose=False)
+        if r["success"]:
+            discrete[arch] = r
+            print(f"{arch:<18s} | {r['energy_mission_wh']:11.2f} | {r['m_tow']:9.2f} | "
+                  f"{r['S_ref']:10.3f} | {r['L_D']:5.1f}")
+        else:
+            print(f"{arch:<18s} | {'did not converge':>11s}")
+
+    print()
+    print("=" * 78)
+    print("CONTINUOUS ARCHITECTURE RELAXATION (architecture is a design variable)")
+    print("=" * 78)
+    relaxed = run_optimization(build_problem(penalty_scale=args.penalty), verbose=True)
+
+    if discrete:
+        best = min(discrete, key=lambda a: discrete[a]["energy_mission_wh"])
+        agree = relaxed["dominant_architecture"] == best
+        print()
+        print(f"Best discrete architecture : {best} "
+              f"({discrete[best]['energy_mission_wh']:.2f} Wh)")
+        print(f"Relaxation selected        : {relaxed['dominant_architecture']} "
+              f"({relaxed['energy_mission_wh']:.2f} Wh)")
+        print(f"Agreement                  : {'YES' if agree else 'NO'}")
+        print("The relaxation reaches this in ONE gradient-based solve, without "
+              "enumerating the six architectures.")
 
 
 if __name__ == "__main__":

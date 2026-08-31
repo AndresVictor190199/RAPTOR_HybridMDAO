@@ -6,7 +6,7 @@ Unit Tests for AeroSandbox VLM Aerodynamics Interface
 import pytest
 import numpy as np
 from hpraptor.m2_geometry.planform import WingPlanform
-from hpraptor.m3_aero.aerosandbox_interface import run_vlm_analysis
+from hpraptor.m4_aero.aerosandbox_interface import run_vlm_analysis
 
 
 def test_vlm_lift_curve():

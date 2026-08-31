@@ -32,6 +32,11 @@ class DEMMetadata:
     elev_min: float
     elev_max: float
     elev_mean: float
+    # Which ingestion path produced this DEM (see srtm_downloader.build_dem):
+    #   "nasadem"/"cop30"/... — OpenTopography raster (void-filled, 1 API call)
+    #   "srtm30m"/"srtm90m"   — OpenTopoData point queries
+    # All carry the same units: meters above the EGM96 geoid (m AMSL).
+    source: str = "unknown"
 
 
 class DEMInterface:
@@ -119,6 +124,7 @@ class DEMInterface:
             elev_min=float(np.nanmin(self.elev_grid)),
             elev_max=float(np.nanmax(self.elev_grid)),
             elev_mean=float(np.nanmean(self.elev_grid)),
+            source=str(data['source']) if 'source' in data.files else "unknown",
         )
 
     # ── Point queries ────────────────────────────────────────────────────
@@ -287,4 +293,5 @@ class DEMInterface:
         return (f"DEMInterface(lat=[{m.lat_min:.3f}, {m.lat_max:.3f}], "
                 f"lon=[{m.lon_min:.3f}, {m.lon_max:.3f}], "
                 f"shape=({m.n_lat}, {m.n_lon}), "
-                f"elev=[{m.elev_min:.0f}, {m.elev_max:.0f}] m)")
+                f"elev=[{m.elev_min:.0f}, {m.elev_max:.0f}] m, "
+                f"source={m.source})")

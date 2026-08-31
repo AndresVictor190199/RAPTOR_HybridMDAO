@@ -15,6 +15,13 @@ venv/
 env/
 .env/
 
+# Secrets — API keys (e.g. OPENTOPOGRAPHY_API_KEY) belong in the environment,
+# never in the repo. Covers a .env FILE, which the .env/ rule above does not.
+.env
+.env.*
+*.env
+secrets.json
+
 # IDE
 .vscode/
 .idea/
@@ -39,9 +46,32 @@ figures/*.svg
 demo_mdao*_out/
 demo_mdao_out/
 *.openmdao_out
+.openmdao/
+*_out/
 
 # Scratch / debug scripts
 scratch/
 
 # Workspace files
 *.code-workspace
+
+# OpenMDAO auto-generated report directories
+reports/*_out/
+
+# Stale virtualenvs / scratch work
+HybridRaptor/
+
+# ── Generated artifacts that are cheap to rebuild ────────────────────────
+# The DEM is a cache: one OpenTopography call and ~13 s rebuilds it, and the
+# .npz files run to megabytes each. Keeping them out means the repo carries
+# the recipe rather than the result, and nobody pulls 12 MB of terrain they
+# will re-fetch anyway. Rebuild:
+#   python -m hpraptor.m1_mission.srtm_downloader --mission configs/<x>.yaml
+data/dem/
+
+# The interactive 3D pages embed the whole scene as base64 VTK -- 6-13 MB
+# each. The static plates next to them are committed; regenerate these with
+#   python -m hpraptor.postprocessing.trajectory_3d --interactive
+reports/*_interactive.html
+reports/*.vts
+reports/*.vtp

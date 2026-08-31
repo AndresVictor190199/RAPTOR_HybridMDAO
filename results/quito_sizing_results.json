@@ -3,162 +3,159 @@
         "discrete": {
             "all_electric": {
                 "succeeded": true,
-                "energy_MJ": 0.4300755126750032,
-                "fuel_burned_kg": 0.0,
-                "final_soc": 0.9121577792738964
+                "energy_MJ": 0.4387993248300722,
+                "fuel_burned_kg": -7.105427357601002e-15,
+                "final_soc": 0.9103759548957562
             },
             "series": {
                 "succeeded": true,
-                "energy_MJ": 169.92719653185205,
-                "fuel_burned_kg": 3.9209617845525386,
-                "final_soc": 0.7291993880529299
+                "energy_MJ": 1.1705857331753537,
+                "fuel_burned_kg": 0.008164228591166278,
+                "final_soc": 0.8326135817493456
             },
             "parallel": {
                 "succeeded": true,
-                "energy_MJ": 270.3408723092934,
-                "fuel_burned_kg": 6.25701197220798,
-                "final_soc": 0.7366508365297677
+                "energy_MJ": 0.7794805163307011,
+                "fuel_burned_kg": 0.0047654958544463,
+                "final_soc": 0.8826462020854758
             },
             "series_parallel": {
-                "succeeded": false
+                "succeeded": true,
+                "energy_MJ": 1.0210726982670055,
+                "fuel_burned_kg": 0.005266334426874408,
+                "final_soc": 0.8377000984658076
             },
             "turbo_electric": {
                 "succeeded": true,
-                "energy_MJ": 0.7419515938644635,
-                "fuel_burned_kg": 0.0014653632154768559,
-                "final_soc": 0.8613274151145918
+                "energy_MJ": 0.8335434453440336,
+                "fuel_burned_kg": 0.002283483857805635,
+                "final_soc": 0.849805220698858
             },
             "fuel_cell": {
                 "succeeded": true,
-                "energy_MJ": 0.6935696452315075,
-                "fuel_burned_kg": 0.0006196100987772013,
-                "final_soc": 0.8735260552740516
+                "energy_MJ": 1.2158726631283432,
+                "fuel_burned_kg": 0.0013603727303568292,
+                "final_soc": 0.7850024641573685
             }
         },
         "continuous_relaxation": {
             "succeeded": true,
             "chosen_architecture": "all_electric",
-            "z_arch": 1.002643066697524,
+            "z_arch": 1.0000039970651504,
             "weights": [
-                0.9994699534428315,
-                7.76779173777327e-07,
-                5.9138518129138103e-08,
-                8.012820125809237e-07,
-                2.278992045929257e-06,
-                0.0005261303654184175
+                0.999997813083048,
+                1.4545343678183861e-06,
+                2.7345724128476095e-08,
+                4.348676890987434e-07,
+                1.676095872587839e-07,
+                1.0255958361234629e-07
             ],
-            "energy_MJ": 0.45880000970656515,
-            "fuel_burned_kg": 1.6351989533092137e-05,
-            "final_soc": 0.9064345972826351
+            "energy_MJ": 0.7167721292834303,
+            "fuel_burned_kg": 3.077203203361023e-08,
+            "final_soc": 0.8536007340511009
         }
     },
     "50.0": {
         "discrete": {
             "all_electric": {
                 "succeeded": true,
-                "energy_MJ": 1.204760640609378,
+                "energy_MJ": 0.9373972512878411,
                 "fuel_burned_kg": 3.552713678800501e-15,
-                "final_soc": 0.6062873723499264
+                "final_soc": 0.6936610289909515
             },
             "series": {
                 "succeeded": true,
-                "energy_MJ": 293.2443007385272,
-                "fuel_burned_kg": 6.777765003847669,
-                "final_soc": 0.4116321656609639
+                "energy_MJ": 3.851621708211983,
+                "fuel_burned_kg": 0.03521931147400181,
+                "final_soc": 0.23621198861767811
             },
             "parallel": {
                 "succeeded": true,
-                "energy_MJ": 291.1938177206123,
-                "fuel_burned_kg": 6.730205331375068,
-                "final_soc": 0.4134024602992248
+                "energy_MJ": 3.7210435507368604,
+                "fuel_burned_kg": 0.03636820717664335,
+                "final_soc": 0.29502920191464194
             },
             "series_parallel": {
                 "succeeded": true,
-                "energy_MJ": 164.45095103934332,
-                "fuel_burned_kg": 3.7757948584309204,
-                "final_soc": 0.3164143376425702
+                "energy_MJ": 2.095382756221891,
+                "fuel_burned_kg": 0.016157018135636747,
+                "final_soc": 0.5422774586962382
             },
             "turbo_electric": {
                 "succeeded": true,
-                "energy_MJ": 2.051471766579635,
-                "fuel_burned_kg": 0.004142354225542988,
-                "final_soc": 0.3877939428492528
+                "energy_MJ": 3.006753664682575,
+                "fuel_burned_kg": 0.009436131035222672,
+                "final_soc": 0.1499999901411765
             },
             "fuel_cell": {
                 "succeeded": true,
-                "energy_MJ": 1.4879178709115572,
-                "fuel_burned_kg": 0.003488965161153601,
-                "final_soc": 0.6505744929499591
+                "energy_MJ": 2.164978457055658,
+                "fuel_burned_kg": 0.00364727649523644,
+                "final_soc": 0.43552115110219447
             }
         },
         "continuous_relaxation": {
             "succeeded": true,
             "chosen_architecture": "all_electric",
-            "z_arch": 2.2897321167030946,
+            "z_arch": 1.0000000002695748,
             "weights": [
-                0.6775659222378011,
-                9.387867533253628e-07,
-                1.749643009683104e-07,
-                1.0280568386107411e-06,
-                0.3224319359543058,
-                1.0775529890711928e-16
+                0.9999999998954268,
+                4.861069959168463e-12,
+                4.2331722903922297e-11,
+                4.9490815371927804e-11,
+                7.871242656602119e-12,
+                1.854199164489079e-14
             ],
-            "energy_MJ": 2.2034122543626475,
-            "fuel_burned_kg": 0.003776722461367399,
-            "final_soc": 0.3330022259725983
+            "energy_MJ": 1.3135536914277979,
+            "fuel_burned_kg": 1.275708427783684e-10,
+            "final_soc": 0.5707340895613557
         }
     },
     "100.0": {
         "discrete": {
             "all_electric": {
                 "succeeded": true,
-                "energy_MJ": 1.5256813223071908,
-                "fuel_burned_kg": -1.2292389328649733e-12,
-                "final_soc": 0.8005645330248303
+                "energy_MJ": 4.877336468578644,
+                "fuel_burned_kg": 0.0,
+                "final_soc": 0.36243967730998117
             },
             "series": {
-                "succeeded": false
+                "succeeded": true,
+                "energy_MJ": 7.340703961978927,
+                "fuel_burned_kg": 0.044328482873908115,
+                "final_soc": 0.2895974904051139
             },
             "parallel": {
-                "succeeded": true,
-                "energy_MJ": 309.5525885461916,
-                "fuel_burned_kg": 7.108972313477409,
-                "final_soc": 0.49453868409634316
+                "succeeded": false
             },
             "series_parallel": {
-                "succeeded": true,
-                "energy_MJ": 349.6150306209141,
-                "fuel_burned_kg": 8.054775969231997,
-                "final_soc": 0.5739001380472922
+                "succeeded": false
             },
             "turbo_electric": {
-                "succeeded": true,
-                "energy_MJ": 4.500335249690906,
-                "fuel_burned_kg": 0.005015390925620977,
-                "final_soc": 0.43991196864193416
+                "succeeded": false
             },
             "fuel_cell": {
                 "succeeded": true,
-                "energy_MJ": 5.709986741751993,
-                "fuel_burned_kg": 0.005018595746747678,
-                "final_soc": 0.33231957488336317
+                "energy_MJ": 8.580741089589864,
+                "fuel_burned_kg": 0.017318675239835102,
+                "final_soc": 0.14999999205102604
             }
         },
         "continuous_relaxation": {
             "succeeded": true,
             "chosen_architecture": "all_electric",
-            "z_arch": 1.0,
+            "z_arch": 1.0298214888725976,
             "weights": [
-                1.0,
-                2.6997060292960634e-30,
-                9.273055569360267e-30,
-                9.206690103540716e-30,
-                1.6115670255997113e-47,
-                1.064634157045007e-26
+                0.992557255119547,
+                0.0002137148491477071,
+                0.0006992373766428578,
+                0.0007023838592434705,
+                0.0030348962846607794,
+                0.0027925125107581498
             ],
-            "energy_MJ": 0.8368276785150959,
-            "fuel_burned_kg": 0.0,
-            "final_soc": 0.8906107609784188
+            "energy_MJ": 3.2130205620094214,
+            "fuel_burned_kg": 0.00034050316855882556,
+            "final_soc": 0.5819208222757105
         }
     },
     "200.0": {
@@ -167,51 +164,29 @@
                 "succeeded": false
             },
             "series": {
-                "succeeded": true,
-                "energy_MJ": 305.7179669571549,
-                "fuel_burned_kg": 6.916927734688784,
-                "final_soc": 0.27755343219719764
+                "succeeded": false
             },
             "parallel": {
-                "succeeded": true,
-                "energy_MJ": 323.91603299325516,
-                "fuel_burned_kg": 7.396703164321622,
-                "final_soc": 0.4895166076317743
+                "succeeded": false
             },
             "series_parallel": {
-                "succeeded": true,
-                "energy_MJ": 292.8132871588823,
-                "fuel_burned_kg": 6.600976503752406,
-                "final_soc": 0.21818758191469712
+                "succeeded": false
             },
             "turbo_electric": {
                 "succeeded": true,
-                "energy_MJ": 11.641645719359772,
-                "fuel_burned_kg": 0.04390454896480378,
-                "final_soc": 0.14999999007640874
+                "energy_MJ": 10.196806422258021,
+                "fuel_burned_kg": 0.017026873483416693,
+                "final_soc": 0.17519382462125457
             },
             "fuel_cell": {
                 "succeeded": true,
-                "energy_MJ": 13.119350904888371,
-                "fuel_burned_kg": 0.02804667328214805,
-                "final_soc": 0.1499999903241303
+                "energy_MJ": 14.511082442693278,
+                "fuel_burned_kg": 0.03964443609481805,
+                "final_soc": 0.14999999029933647
             }
         },
         "continuous_relaxation": {
-            "succeeded": true,
-            "chosen_architecture": "parallel",
-            "z_arch": 3.0,
-            "weights": [
-                3.610869249962089e-50,
-                3.090674534312737e-23,
-                1.0,
-                1.2938797145895604e-26,
-                6.548827113878226e-27,
-                1.7901371761340845e-26
-            ],
-            "energy_MJ": 329.70716921148994,
-            "fuel_burned_kg": 7.440777188311529,
-            "final_soc": 0.14999999005715098
+            "succeeded": false
         }
     }
 }

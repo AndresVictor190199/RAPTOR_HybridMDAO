@@ -1,0 +1,668 @@
+
+  sizing  (62 outputs)
+      Re_cruise                         5e+05 -        Chord Reynolds number at the cruise condition
+      g8_reynolds                           0 -        1 - Re_cruise/Re_min; <= 0 keeps the design inside t
+      C_D0                               0.02 -        Zero-lift drag coefficient
+      C_L_cruise                          0.6 -        
+      C_D_cruise                         0.04 -        
+      L_D                                  17 -        Cruise lift-to-drag ratio
+      D_cruise                             12 N        
+      g1_cl_margin                       -0.5 -        C_L_cruise/(0
+      arch_weights                   array(6) -        
+      m_propulsion                        2.5 kg       
+      fuel_flow                        0.0001 kg/s     
+      P_elec_bus                          300 W        
+      fuel_lhv                        4.3e+07 J/kg     
+      fuel_capable                          1 -        Blended ability to convert fuel to shaft power; 0 fo
+      penalty_discreteness                0.8 -        sum w_i(1-w_i); 0 when a single architecture is chos
+      E_battery_wh                        250 W*h      
+      E_fuel_wh                       1.4e+04 W*h      
+      E_vtol_wh                            80 W*h      
+      E_climb_wh                           60 W*h      
+      E_cruise_wh                         900 W*h      
+      t_climb_s                            60 s        
+      k_effective                         0.5 -        Battery share actually used after architecture gatin
+      energy_mission_wh                  1000 W*h      Shaft energy required by the design mission
+      energy_available_wh                1000 W*h      Usable shaft energy from the sized battery + fuel
+      SOC_final                           0.2 -        Battery state of charge at mission end
+      g2_energy_margin                      0 -        energy_mission/energy_available - 1; <= 0 means the 
+      g3_soc_margin_analytic                0 -        reserve_soc - SOC_final; <= 0 means the battery stil
+      g6_battery_power                      0 -        P_peak_elec/pack power limit - 1; <= 0 means the pac
+      P_battery_peak_w                   3000 W        Peak electrical draw the pack must sustain
+      m_fuel_carried                      0.3 kg       Fuel actually carried, after architecture gating
+      E_battery_used_wh                   200 W*h      Electrical energy drawn from the pack over the missi
+      V_cruise                             30 m/s      
+      altitude                           3126 m        
+      S_ref                               0.7 m**2     Wing reference area
+      span                                2.7 m        
+      chord_mean                         0.27 m        
+      wetted_wing                         1.5 m**2     
+      fuse_length                         1.2 m        
+      fuse_diameter                       0.2 m        
+      wetted_fuse                        0.75 m**2     
+      rotor_diameter                     0.45 m        
+      A_rotor                            0.65 m**2     Total rotor disk area
+      S_h                                0.09 m**2     Horizontal tail area
+      S_v                                0.07 m**2     Vertical tail area
+      tail_arm                           1.07 m        
+      energy_primary_wh_analytic         1000 W*h      Energy drawn from outside the aircraft
+      energy_system_mass                    3 kg       Battery + fuel + powerplant mass
+      objective_analytic                 1000 -        
+      P_hover                            3000 W        
+      P_cruise                            450 W        
+      P_climb                            1500 W        
+      P_motor_total                      3500 W        
+      rotor_span_required                   2 m        Lateral extent the rotor array needs
+      g7_rotor_fit                          0 -        rotor_span_required/span - 1; <= 0 means the rotors 
+      m_rotor_group                       0.3 kg       Blades, hubs and booms — excludes the motors, which 
+      m_wing_structure                      3 kg       Spar + ribs + skin
+      spar_mass                             1 kg       
+      g4_stress_margin                   -0.5 -        sigma_max/sigma_allow - 1; <= 0 is feasible
+      m_empty                               8 kg       f_empty_nonwing * m_tow + wing structure
+      agl_cruise                          100 m        Height above the route's highest terrain
+      g5_terrain_clearance                  0 -        (h_terrain_max + clearance_required - h_cruise) norm
+      m_tow                                11 kg       Closed MTOW
+
+  traj  (28 outputs)
+      linkages.vtol_climb:time_final|transition_fw:time_initial            0 s        
+      linkages.vtol_climb:x_final|transition_fw:x_initial            0 m        
+      linkages.vtol_climb:h_final|transition_fw:h_initial            0 m        
+      linkages.vtol_climb:m_final|transition_fw:m_initial            0 kg       
+      linkages.vtol_climb:SOC_final|transition_fw:SOC_initial            0 -        
+      linkages.transition_fw:time_final|cruise:time_initial            0 s        
+      linkages.transition_fw:x_final|cruise:x_initial            0 m        
+      linkages.transition_fw:h_final|cruise:h_initial            0 m        
+      linkages.transition_fw:v_final|cruise:v_initial            0 m/s      
+      linkages.transition_fw:m_final|cruise:m_initial            0 kg       
+      linkages.transition_fw:SOC_final|cruise:SOC_initial            0 -        
+      linkages.cruise:time_final|transition_bw:time_initial            0 s        
+      linkages.cruise:x_final|transition_bw:x_initial            0 m        
+      linkages.cruise:h_final|transition_bw:h_initial            0 m        
+      linkages.cruise:v_final|transition_bw:v_initial            0 m/s      
+      linkages.cruise:m_final|transition_bw:m_initial            0 kg       
+      linkages.cruise:SOC_final|transition_bw:SOC_initial            0 -        
+      linkages.transition_bw:time_final|vtol_land:time_initial            0 s        
+      linkages.transition_bw:x_final|vtol_land:x_initial            0 m        
+      linkages.transition_bw:h_final|vtol_land:h_initial            0 m        
+      linkages.transition_bw:m_final|vtol_land:m_initial            0 kg       
+      linkages.transition_bw:SOC_final|vtol_land:SOC_initial            0 -        
+      parameter_vals:S_ref                  0 m**2     
+      parameter_vals:C_D0                   0 -        
+      parameter_vals:A_rotor                0 m**2     
+      parameter_vals:E_batt_J               0 J        
+      parameter_vals:AR                     0 -        
+      parameter_vals:arch_weights     array(6) -        
+
+    traj.phases  (572 outputs)
+        cruise.collocation_constraint.defects:x     array(8) m        Interior defects of state x
+        cruise.collocation_constraint.defects:h     array(8) m        Interior defects of state h
+        cruise.collocation_constraint.defects:v     array(8) m/s      Interior defects of state v
+        cruise.collocation_constraint.defects:m     array(8) kg       Interior defects of state m
+        cruise.collocation_constraint.defects:SOC     array(8) -        Interior defects of state SOC
+        cruise.continuity_comp.defect_controls:T_vtol     array(7) N        Continuity constraint values for control T_vtol
+        cruise.continuity_comp.defect_control_rates:T_vtol_rate     array(7) N/s      Consistency constraint values for control T_vtol der
+        cruise.continuity_comp.defect_controls:T_cruise     array(7) N        Continuity constraint values for control T_cruise
+        cruise.continuity_comp.defect_control_rates:T_cruise_rate     array(7) N/s      Consistency constraint values for control T_cruise d
+        cruise.continuity_comp.defect_controls:k_electric     array(7) -        Continuity constraint values for control k_electric
+        cruise.continuity_comp.defect_control_rates:k_electric_rate     array(7) 1/s      Consistency constraint values for control k_electric
+        cruise.continuity_comp.defect_controls:alpha_deg     array(7) deg      Continuity constraint values for control alpha_deg
+        cruise.continuity_comp.defect_control_rates:alpha_deg_rate     array(7) deg/s    Consistency constraint values for control alpha_deg 
+        cruise.control_values:T_vtol    array(24) N        
+        cruise.control_rates:T_vtol_rate    array(24) N/s      
+        cruise.control_rates:T_vtol_rate2    array(24) N/s**2   
+        cruise.control_comp.control_boundary_values:T_vtol     array(2) N        
+        cruise.control_comp.control_boundary_rates:T_vtol_rate     array(2) N/s      
+        cruise.control_comp.control_boundary_rates:T_vtol_rate2     array(2) N/s**2   
+        cruise.control_values:T_cruise    array(24) N        
+        cruise.control_rates:T_cruise_rate    array(24) N/s      
+        cruise.control_rates:T_cruise_rate2    array(24) N/s**2   
+        cruise.control_comp.control_boundary_values:T_cruise     array(2) N        
+        cruise.control_comp.control_boundary_rates:T_cruise_rate     array(2) N/s      
+        cruise.control_comp.control_boundary_rates:T_cruise_rate2     array(2) N/s**2   
+        cruise.control_values:k_electric    array(24) -        
+        cruise.control_rates:k_electric_rate    array(24) 1/s      
+        cruise.control_rates:k_electric_rate2    array(24) 1/s**2   
+        cruise.control_comp.control_boundary_values:k_electric     array(2) -        
+        cruise.control_comp.control_boundary_rates:k_electric_rate     array(2) 1/s      
+        cruise.control_comp.control_boundary_rates:k_electric_rate2     array(2) 1/s**2   
+        cruise.control_values:alpha_deg    array(24) deg      
+        cruise.control_rates:alpha_deg_rate    array(24) deg/s    
+        cruise.control_rates:alpha_deg_rate2    array(24) deg/s**2 
+        cruise.control_comp.control_boundary_values:alpha_deg     array(2) deg      
+        cruise.control_comp.control_boundary_rates:alpha_deg_rate     array(2) deg/s    
+        cruise.control_comp.control_boundary_rates:alpha_deg_rate2     array(2) deg/s**2 
+        cruise.states:x                array(9) m        
+        cruise.states:h                array(9) m        
+        cruise.states:v                array(9) m/s      
+        cruise.states:m                array(9) kg       
+        cruise.states:SOC              array(9) -        
+        cruise.interleave_comp.all_values:states:x    array(24) m        Values of states:x at all nodes
+        cruise.interleave_comp.all_values:state_rates:x    array(24) m/s      Values of state_rates:x at all nodes
+        cruise.interleave_comp.all_values:states:h    array(24) m        Values of states:h at all nodes
+        cruise.interleave_comp.all_values:state_rates:h    array(24) m/s      Values of state_rates:h at all nodes
+        cruise.interleave_comp.all_values:states:v    array(24) m/s      Values of states:v at all nodes
+        cruise.interleave_comp.all_values:state_rates:v    array(24) m/s**2   Values of state_rates:v at all nodes
+        cruise.interleave_comp.all_values:states:m    array(24) kg       Values of states:m at all nodes
+        cruise.interleave_comp.all_values:state_rates:m    array(24) kg/s     Values of state_rates:m at all nodes
+        cruise.interleave_comp.all_values:states:SOC    array(24) -        Values of states:SOC at all nodes
+        cruise.interleave_comp.all_values:state_rates:SOC    array(24) 1/s      Values of state_rates:SOC at all nodes
+        cruise.interleave_comp.all_values:agl    array(24) m        Values of agl at all nodes
+        cruise.interleave_comp.all_values:C_L    array(24) -        Values of C_L at all nodes
+        cruise.t_initial_val                  0 s        
+        cruise.t_duration_val                 1 s        
+        cruise.parameter_vals:path_heading_deg            0 deg      
+        cruise.parameter_vals:wind_speed_ref            5 m/s      
+        cruise.parameter_vals:wind_heading_deg           45 deg      
+        cruise.parameter_vals:ground_elevation         2906 m        
+        cruise.parameter_vals:S_ref            0 m**2     
+        cruise.parameter_vals:C_D0            0 -        
+        cruise.parameter_vals:A_rotor            0 m**2     
+        cruise.parameter_vals:E_batt_J            0 J        
+        cruise.parameter_vals:AR              0 -        
+        cruise.parameter_vals:arch_weights     array(6) -        
+        cruise.rhs_col.x_dot           array(8) m/s      
+        cruise.rhs_col.h_dot           array(8) m/s      
+        cruise.rhs_col.v_dot           array(8) m/s**2   
+        cruise.rhs_col.m_dot           array(8) kg/s     
+        cruise.rhs_col.SOC_dot         array(8) 1/s      
+        cruise.rhs_col.gamma           array(8) rad      
+        cruise.rhs_col.C_L             array(8) -        
+        cruise.rhs_col.P_shaft         array(8) W        
+        cruise.rhs_col.P_elec_bus      array(8) W        
+        cruise.rhs_col.fuel_flow       array(8) kg/s     
+        cruise.rhs_col.agl             array(8) m        Height above ground, for terrain clearance
+        cruise.rhs_col.ground_elev_used     array(8) m        Terrain height the clearance constraint used
+        cruise.rhs_disc.x_dot         array(16) m/s      
+        cruise.rhs_disc.h_dot         array(16) m/s      
+        cruise.rhs_disc.v_dot         array(16) m/s**2   
+        cruise.rhs_disc.m_dot         array(16) kg/s     
+        cruise.rhs_disc.SOC_dot       array(16) 1/s      
+        cruise.rhs_disc.gamma         array(16) rad      
+        cruise.rhs_disc.C_L           array(16) -        
+        cruise.rhs_disc.P_shaft       array(16) W        
+        cruise.rhs_disc.P_elec_bus    array(16) W        
+        cruise.rhs_disc.fuel_flow     array(16) kg/s     
+        cruise.rhs_disc.agl           array(16) m        Height above ground, for terrain clearance
+        cruise.rhs_disc.ground_elev_used    array(16) m        Terrain height the clearance constraint used
+        cruise.state_interp.state_col:x     array(8) m        Interpolated values of state x at collocation nodes
+        cruise.state_interp.staterate_col:x     array(8) m/s      Interpolated rate of state x at collocation nodes
+        cruise.state_interp.state_col:h     array(8) m        Interpolated values of state h at collocation nodes
+        cruise.state_interp.staterate_col:h     array(8) m/s      Interpolated rate of state h at collocation nodes
+        cruise.state_interp.state_col:v     array(8) m/s      Interpolated values of state v at collocation nodes
+        cruise.state_interp.staterate_col:v     array(8) m/s**2   Interpolated rate of state v at collocation nodes
+        cruise.state_interp.state_col:m     array(8) kg       Interpolated values of state m at collocation nodes
+        cruise.state_interp.staterate_col:m     array(8) kg/s     Interpolated rate of state m at collocation nodes
+        cruise.state_interp.state_col:SOC     array(8) -        Interpolated values of state SOC at collocation node
+        cruise.state_interp.staterate_col:SOC     array(8) 1/s      Interpolated rate of state SOC at collocation nodes
+        cruise.t                      array(24) s        
+        cruise.t_phase                array(24) s        
+        cruise.dt_dstau               array(24) s        
+        cruise.timeseries.agl         array(24) m        
+        cruise.timeseries.C_L         array(24) -        
+        cruise.timeseries.time        array(24) s        
+        cruise.timeseries.time_phase    array(24) s        
+        cruise.timeseries.T_vtol      array(24) N        
+        cruise.timeseries.T_cruise    array(24) N        
+        cruise.timeseries.k_electric    array(24) -        
+        cruise.timeseries.alpha_deg    array(24) deg      
+        cruise.timeseries.x           array(24) m        
+        cruise.timeseries.h           array(24) m        
+        cruise.timeseries.v           array(24) m/s      
+        cruise.timeseries.m           array(24) kg       
+        cruise.timeseries.SOC         array(24) -        
+        transition_bw.collocation_constraint.defects:x     array(4) m        Interior defects of state x
+        transition_bw.collocation_constraint.defects:h     array(4) m        Interior defects of state h
+        transition_bw.collocation_constraint.defects:v     array(4) m/s      Interior defects of state v
+        transition_bw.collocation_constraint.defects:m     array(4) kg       Interior defects of state m
+        transition_bw.collocation_constraint.defects:SOC     array(4) -        Interior defects of state SOC
+        transition_bw.continuity_comp.defect_controls:T_vtol     array(3) N        Continuity constraint values for control T_vtol
+        transition_bw.continuity_comp.defect_control_rates:T_vtol_rate     array(3) N/s      Consistency constraint values for control T_vtol der
+        transition_bw.continuity_comp.defect_controls:T_cruise     array(3) N        Continuity constraint values for control T_cruise
+        transition_bw.continuity_comp.defect_control_rates:T_cruise_rate     array(3) N/s      Consistency constraint values for control T_cruise d
+        transition_bw.continuity_comp.defect_controls:k_electric     array(3) -        Continuity constraint values for control k_electric
+        transition_bw.continuity_comp.defect_control_rates:k_electric_rate     array(3) 1/s      Consistency constraint values for control k_electric
+        transition_bw.continuity_comp.defect_controls:alpha_deg     array(3) deg      Continuity constraint values for control alpha_deg
+        transition_bw.continuity_comp.defect_control_rates:alpha_deg_rate     array(3) deg/s    Consistency constraint values for control alpha_deg 
+        transition_bw.control_values:T_vtol    array(12) N        
+        transition_bw.control_rates:T_vtol_rate    array(12) N/s      
+        transition_bw.control_rates:T_vtol_rate2    array(12) N/s**2   
+        transition_bw.control_comp.control_boundary_values:T_vtol     array(2) N        
+        transition_bw.control_comp.control_boundary_rates:T_vtol_rate     array(2) N/s      
+        transition_bw.control_comp.control_boundary_rates:T_vtol_rate2     array(2) N/s**2   
+        transition_bw.control_values:T_cruise    array(12) N        
+        transition_bw.control_rates:T_cruise_rate    array(12) N/s      
+        transition_bw.control_rates:T_cruise_rate2    array(12) N/s**2   
+        transition_bw.control_comp.control_boundary_values:T_cruise     array(2) N        
+        transition_bw.control_comp.control_boundary_rates:T_cruise_rate     array(2) N/s      
+        transition_bw.control_comp.control_boundary_rates:T_cruise_rate2     array(2) N/s**2   
+        transition_bw.control_values:k_electric    array(12) -        
+        transition_bw.control_rates:k_electric_rate    array(12) 1/s      
+        transition_bw.control_rates:k_electric_rate2    array(12) 1/s**2   
+        transition_bw.control_comp.control_boundary_values:k_electric     array(2) -        
+        transition_bw.control_comp.control_boundary_rates:k_electric_rate     array(2) 1/s      
+        transition_bw.control_comp.control_boundary_rates:k_electric_rate2     array(2) 1/s**2   
+        transition_bw.control_values:alpha_deg    array(12) deg      
+        transition_bw.control_rates:alpha_deg_rate    array(12) deg/s    
+        transition_bw.control_rates:alpha_deg_rate2    array(12) deg/s**2 
+        transition_bw.control_comp.control_boundary_values:alpha_deg     array(2) deg      
+        transition_bw.control_comp.control_boundary_rates:alpha_deg_rate     array(2) deg/s    
+        transition_bw.control_comp.control_boundary_rates:alpha_deg_rate2     array(2) deg/s**2 
+        transition_bw.states:x         array(5) m        
+        transition_bw.states:h         array(5) m        
+        transition_bw.states:v         array(5) m/s      
+        transition_bw.states:m         array(5) kg       
+        transition_bw.states:SOC       array(5) -        
+        transition_bw.interleave_comp.all_values:states:x    array(12) m        Values of states:x at all nodes
+        transition_bw.interleave_comp.all_values:state_rates:x    array(12) m/s      Values of state_rates:x at all nodes
+        transition_bw.interleave_comp.all_values:states:h    array(12) m        Values of states:h at all nodes
+        transition_bw.interleave_comp.all_values:state_rates:h    array(12) m/s      Values of state_rates:h at all nodes
+        transition_bw.interleave_comp.all_values:states:v    array(12) m/s      Values of states:v at all nodes
+        transition_bw.interleave_comp.all_values:state_rates:v    array(12) m/s**2   Values of state_rates:v at all nodes
+        transition_bw.interleave_comp.all_values:states:m    array(12) kg       Values of states:m at all nodes
+        transition_bw.interleave_comp.all_values:state_rates:m    array(12) kg/s     Values of state_rates:m at all nodes
+        transition_bw.interleave_comp.all_values:states:SOC    array(12) -        Values of states:SOC at all nodes
+        transition_bw.interleave_comp.all_values:state_rates:SOC    array(12) 1/s      Values of state_rates:SOC at all nodes
+        transition_bw.interleave_comp.all_values:agl    array(12) m        Values of agl at all nodes
+        transition_bw.interleave_comp.all_values:C_L    array(12) -        Values of C_L at all nodes
+        transition_bw.t_initial_val            0 s        
+        transition_bw.t_duration_val            1 s        
+        transition_bw.parameter_vals:path_heading_deg            0 deg      
+        transition_bw.parameter_vals:wind_speed_ref            5 m/s      
+        transition_bw.parameter_vals:wind_heading_deg           45 deg      
+        transition_bw.parameter_vals:ground_elevation         2906 m        
+        transition_bw.parameter_vals:S_ref            0 m**2     
+        transition_bw.parameter_vals:C_D0            0 -        
+        transition_bw.parameter_vals:A_rotor            0 m**2     
+        transition_bw.parameter_vals:E_batt_J            0 J        
+        transition_bw.parameter_vals:AR            0 -        
+        transition_bw.parameter_vals:arch_weights     array(6) -        
+        transition_bw.rhs_col.x_dot     array(4) m/s      
+        transition_bw.rhs_col.h_dot     array(4) m/s      
+        transition_bw.rhs_col.v_dot     array(4) m/s**2   
+        transition_bw.rhs_col.m_dot     array(4) kg/s     
+        transition_bw.rhs_col.SOC_dot     array(4) 1/s      
+        transition_bw.rhs_col.gamma     array(4) rad      
+        transition_bw.rhs_col.C_L      array(4) -        
+        transition_bw.rhs_col.P_shaft     array(4) W        
+        transition_bw.rhs_col.P_elec_bus     array(4) W        
+        transition_bw.rhs_col.fuel_flow     array(4) kg/s     
+        transition_bw.rhs_col.agl      array(4) m        Height above ground, for terrain clearance
+        transition_bw.rhs_col.ground_elev_used     array(4) m        Terrain height the clearance constraint used
+        transition_bw.rhs_disc.x_dot     array(8) m/s      
+        transition_bw.rhs_disc.h_dot     array(8) m/s      
+        transition_bw.rhs_disc.v_dot     array(8) m/s**2   
+        transition_bw.rhs_disc.m_dot     array(8) kg/s     
+        transition_bw.rhs_disc.SOC_dot     array(8) 1/s      
+        transition_bw.rhs_disc.gamma     array(8) rad      
+        transition_bw.rhs_disc.C_L     array(8) -        
+        transition_bw.rhs_disc.P_shaft     array(8) W        
+        transition_bw.rhs_disc.P_elec_bus     array(8) W        
+        transition_bw.rhs_disc.fuel_flow     array(8) kg/s     
+        transition_bw.rhs_disc.agl     array(8) m        Height above ground, for terrain clearance
+        transition_bw.rhs_disc.ground_elev_used     array(8) m        Terrain height the clearance constraint used
+        transition_bw.state_interp.state_col:x     array(4) m        Interpolated values of state x at collocation nodes
+        transition_bw.state_interp.staterate_col:x     array(4) m/s      Interpolated rate of state x at collocation nodes
+        transition_bw.state_interp.state_col:h     array(4) m        Interpolated values of state h at collocation nodes
+        transition_bw.state_interp.staterate_col:h     array(4) m/s      Interpolated rate of state h at collocation nodes
+        transition_bw.state_interp.state_col:v     array(4) m/s      Interpolated values of state v at collocation nodes
+        transition_bw.state_interp.staterate_col:v     array(4) m/s**2   Interpolated rate of state v at collocation nodes
+        transition_bw.state_interp.state_col:m     array(4) kg       Interpolated values of state m at collocation nodes
+        transition_bw.state_interp.staterate_col:m     array(4) kg/s     Interpolated rate of state m at collocation nodes
+        transition_bw.state_interp.state_col:SOC     array(4) -        Interpolated values of state SOC at collocation node
+        transition_bw.state_interp.staterate_col:SOC     array(4) 1/s      Interpolated rate of state SOC at collocation nodes
+        transition_bw.t               array(12) s        
+        transition_bw.t_phase         array(12) s        
+        transition_bw.dt_dstau        array(12) s        
+        transition_bw.timeseries.agl    array(12) m        
+        transition_bw.timeseries.C_L    array(12) -        
+        transition_bw.timeseries.time    array(12) s        
+        transition_bw.timeseries.time_phase    array(12) s        
+        transition_bw.timeseries.T_vtol    array(12) N        
+        transition_bw.timeseries.T_cruise    array(12) N        
+        transition_bw.timeseries.k_electric    array(12) -        
+        transition_bw.timeseries.alpha_deg    array(12) deg      
+        transition_bw.timeseries.x    array(12) m        
+        transition_bw.timeseries.h    array(12) m        
+        transition_bw.timeseries.v    array(12) m/s      
+        transition_bw.timeseries.m    array(12) kg       
+        transition_bw.timeseries.SOC    array(12) -        
+        transition_fw.collocation_constraint.defects:x     array(4) m        Interior defects of state x
+        transition_fw.collocation_constraint.defects:h     array(4) m        Interior defects of state h
+        transition_fw.collocation_constraint.defects:v     array(4) m/s      Interior defects of state v
+        transition_fw.collocation_constraint.defects:m     array(4) kg       Interior defects of state m
+        transition_fw.collocation_constraint.defects:SOC     array(4) -        Interior defects of state SOC
+        transition_fw.continuity_comp.defect_controls:T_vtol     array(3) N        Continuity constraint values for control T_vtol
+        transition_fw.continuity_comp.defect_control_rates:T_vtol_rate     array(3) N/s      Consistency constraint values for control T_vtol der
+        transition_fw.continuity_comp.defect_controls:T_cruise     array(3) N        Continuity constraint values for control T_cruise
+        transition_fw.continuity_comp.defect_control_rates:T_cruise_rate     array(3) N/s      Consistency constraint values for control T_cruise d
+        transition_fw.continuity_comp.defect_controls:k_electric     array(3) -        Continuity constraint values for control k_electric
+        transition_fw.continuity_comp.defect_control_rates:k_electric_rate     array(3) 1/s      Consistency constraint values for control k_electric
+        transition_fw.continuity_comp.defect_controls:alpha_deg     array(3) deg      Continuity constraint values for control alpha_deg
+        transition_fw.continuity_comp.defect_control_rates:alpha_deg_rate     array(3) deg/s    Consistency constraint values for control alpha_deg 
+        transition_fw.control_values:T_vtol    array(12) N        
+        transition_fw.control_rates:T_vtol_rate    array(12) N/s      
+        transition_fw.control_rates:T_vtol_rate2    array(12) N/s**2   
+        transition_fw.control_comp.control_boundary_values:T_vtol     array(2) N        
+        transition_fw.control_comp.control_boundary_rates:T_vtol_rate     array(2) N/s      
+        transition_fw.control_comp.control_boundary_rates:T_vtol_rate2     array(2) N/s**2   
+        transition_fw.control_values:T_cruise    array(12) N        
+        transition_fw.control_rates:T_cruise_rate    array(12) N/s      
+        transition_fw.control_rates:T_cruise_rate2    array(12) N/s**2   
+        transition_fw.control_comp.control_boundary_values:T_cruise     array(2) N        
+        transition_fw.control_comp.control_boundary_rates:T_cruise_rate     array(2) N/s      
+        transition_fw.control_comp.control_boundary_rates:T_cruise_rate2     array(2) N/s**2   
+        transition_fw.control_values:k_electric    array(12) -        
+        transition_fw.control_rates:k_electric_rate    array(12) 1/s      
+        transition_fw.control_rates:k_electric_rate2    array(12) 1/s**2   
+        transition_fw.control_comp.control_boundary_values:k_electric     array(2) -        
+        transition_fw.control_comp.control_boundary_rates:k_electric_rate     array(2) 1/s      
+        transition_fw.control_comp.control_boundary_rates:k_electric_rate2     array(2) 1/s**2   
+        transition_fw.control_values:alpha_deg    array(12) deg      
+        transition_fw.control_rates:alpha_deg_rate    array(12) deg/s    
+        transition_fw.control_rates:alpha_deg_rate2    array(12) deg/s**2 
+        transition_fw.control_comp.control_boundary_values:alpha_deg     array(2) deg      
+        transition_fw.control_comp.control_boundary_rates:alpha_deg_rate     array(2) deg/s    
+        transition_fw.control_comp.control_boundary_rates:alpha_deg_rate2     array(2) deg/s**2 
+        transition_fw.states:x         array(5) m        
+        transition_fw.states:h         array(5) m        
+        transition_fw.states:v         array(5) m/s      
+        transition_fw.states:m         array(5) kg       
+        transition_fw.states:SOC       array(5) -        
+        transition_fw.interleave_comp.all_values:states:x    array(12) m        Values of states:x at all nodes
+        transition_fw.interleave_comp.all_values:state_rates:x    array(12) m/s      Values of state_rates:x at all nodes
+        transition_fw.interleave_comp.all_values:states:h    array(12) m        Values of states:h at all nodes
+        transition_fw.interleave_comp.all_values:state_rates:h    array(12) m/s      Values of state_rates:h at all nodes
+        transition_fw.interleave_comp.all_values:states:v    array(12) m/s      Values of states:v at all nodes
+        transition_fw.interleave_comp.all_values:state_rates:v    array(12) m/s**2   Values of state_rates:v at all nodes
+        transition_fw.interleave_comp.all_values:states:m    array(12) kg       Values of states:m at all nodes
+        transition_fw.interleave_comp.all_values:state_rates:m    array(12) kg/s     Values of state_rates:m at all nodes
+        transition_fw.interleave_comp.all_values:states:SOC    array(12) -        Values of states:SOC at all nodes
+        transition_fw.interleave_comp.all_values:state_rates:SOC    array(12) 1/s      Values of state_rates:SOC at all nodes
+        transition_fw.interleave_comp.all_values:agl    array(12) m        Values of agl at all nodes
+        transition_fw.interleave_comp.all_values:C_L    array(12) -        Values of C_L at all nodes
+        transition_fw.t_initial_val            0 s        
+        transition_fw.t_duration_val            1 s        
+        transition_fw.parameter_vals:path_heading_deg            0 deg      
+        transition_fw.parameter_vals:wind_speed_ref            5 m/s      
+        transition_fw.parameter_vals:wind_heading_deg           45 deg      
+        transition_fw.parameter_vals:ground_elevation         2906 m        
+        transition_fw.parameter_vals:S_ref            0 m**2     
+        transition_fw.parameter_vals:C_D0            0 -        
+        transition_fw.parameter_vals:A_rotor            0 m**2     
+        transition_fw.parameter_vals:E_batt_J            0 J        
+        transition_fw.parameter_vals:AR            0 -        
+        transition_fw.parameter_vals:arch_weights     array(6) -        
+        transition_fw.rhs_col.x_dot     array(4) m/s      
+        transition_fw.rhs_col.h_dot     array(4) m/s      
+        transition_fw.rhs_col.v_dot     array(4) m/s**2   
+        transition_fw.rhs_col.m_dot     array(4) kg/s     
+        transition_fw.rhs_col.SOC_dot     array(4) 1/s      
+        transition_fw.rhs_col.gamma     array(4) rad      
+        transition_fw.rhs_col.C_L      array(4) -        
+        transition_fw.rhs_col.P_shaft     array(4) W        
+        transition_fw.rhs_col.P_elec_bus     array(4) W        
+        transition_fw.rhs_col.fuel_flow     array(4) kg/s     
+        transition_fw.rhs_col.agl      array(4) m        Height above ground, for terrain clearance
+        transition_fw.rhs_col.ground_elev_used     array(4) m        Terrain height the clearance constraint used
+        transition_fw.rhs_disc.x_dot     array(8) m/s      
+        transition_fw.rhs_disc.h_dot     array(8) m/s      
+        transition_fw.rhs_disc.v_dot     array(8) m/s**2   
+        transition_fw.rhs_disc.m_dot     array(8) kg/s     
+        transition_fw.rhs_disc.SOC_dot     array(8) 1/s      
+        transition_fw.rhs_disc.gamma     array(8) rad      
+        transition_fw.rhs_disc.C_L     array(8) -        
+        transition_fw.rhs_disc.P_shaft     array(8) W        
+        transition_fw.rhs_disc.P_elec_bus     array(8) W        
+        transition_fw.rhs_disc.fuel_flow     array(8) kg/s     
+        transition_fw.rhs_disc.agl     array(8) m        Height above ground, for terrain clearance
+        transition_fw.rhs_disc.ground_elev_used     array(8) m        Terrain height the clearance constraint used
+        transition_fw.state_interp.state_col:x     array(4) m        Interpolated values of state x at collocation nodes
+        transition_fw.state_interp.staterate_col:x     array(4) m/s      Interpolated rate of state x at collocation nodes
+        transition_fw.state_interp.state_col:h     array(4) m        Interpolated values of state h at collocation nodes
+        transition_fw.state_interp.staterate_col:h     array(4) m/s      Interpolated rate of state h at collocation nodes
+        transition_fw.state_interp.state_col:v     array(4) m/s      Interpolated values of state v at collocation nodes
+        transition_fw.state_interp.staterate_col:v     array(4) m/s**2   Interpolated rate of state v at collocation nodes
+        transition_fw.state_interp.state_col:m     array(4) kg       Interpolated values of state m at collocation nodes
+        transition_fw.state_interp.staterate_col:m     array(4) kg/s     Interpolated rate of state m at collocation nodes
+        transition_fw.state_interp.state_col:SOC     array(4) -        Interpolated values of state SOC at collocation node
+        transition_fw.state_interp.staterate_col:SOC     array(4) 1/s      Interpolated rate of state SOC at collocation nodes
+        transition_fw.t               array(12) s        
+        transition_fw.t_phase         array(12) s        
+        transition_fw.dt_dstau        array(12) s        
+        transition_fw.timeseries.agl    array(12) m        
+        transition_fw.timeseries.C_L    array(12) -        
+        transition_fw.timeseries.time    array(12) s        
+        transition_fw.timeseries.time_phase    array(12) s        
+        transition_fw.timeseries.T_vtol    array(12) N        
+        transition_fw.timeseries.T_cruise    array(12) N        
+        transition_fw.timeseries.k_electric    array(12) -        
+        transition_fw.timeseries.alpha_deg    array(12) deg      
+        transition_fw.timeseries.x    array(12) m        
+        transition_fw.timeseries.h    array(12) m        
+        transition_fw.timeseries.v    array(12) m/s      
+        transition_fw.timeseries.m    array(12) kg       
+        transition_fw.timeseries.SOC    array(12) -        
+        vtol_climb.collocation_constraint.defects:x     array(4) m        Interior defects of state x
+        vtol_climb.collocation_constraint.defects:h     array(4) m        Interior defects of state h
+        vtol_climb.collocation_constraint.defects:v     array(4) m/s      Interior defects of state v
+        vtol_climb.collocation_constraint.defects:m     array(4) kg       Interior defects of state m
+        vtol_climb.collocation_constraint.defects:SOC     array(4) -        Interior defects of state SOC
+        vtol_climb.continuity_comp.defect_controls:T_vtol     array(3) N        Continuity constraint values for control T_vtol
+        vtol_climb.continuity_comp.defect_control_rates:T_vtol_rate     array(3) N/s      Consistency constraint values for control T_vtol der
+        vtol_climb.continuity_comp.defect_controls:T_cruise     array(3) N        Continuity constraint values for control T_cruise
+        vtol_climb.continuity_comp.defect_control_rates:T_cruise_rate     array(3) N/s      Consistency constraint values for control T_cruise d
+        vtol_climb.continuity_comp.defect_controls:k_electric     array(3) -        Continuity constraint values for control k_electric
+        vtol_climb.continuity_comp.defect_control_rates:k_electric_rate     array(3) 1/s      Consistency constraint values for control k_electric
+        vtol_climb.continuity_comp.defect_controls:alpha_deg     array(3) deg      Continuity constraint values for control alpha_deg
+        vtol_climb.continuity_comp.defect_control_rates:alpha_deg_rate     array(3) deg/s    Consistency constraint values for control alpha_deg 
+        vtol_climb.control_values:T_vtol    array(12) N        
+        vtol_climb.control_rates:T_vtol_rate    array(12) N/s      
+        vtol_climb.control_rates:T_vtol_rate2    array(12) N/s**2   
+        vtol_climb.control_comp.control_boundary_values:T_vtol     array(2) N        
+        vtol_climb.control_comp.control_boundary_rates:T_vtol_rate     array(2) N/s      
+        vtol_climb.control_comp.control_boundary_rates:T_vtol_rate2     array(2) N/s**2   
+        vtol_climb.control_values:T_cruise    array(12) N        
+        vtol_climb.control_rates:T_cruise_rate    array(12) N/s      
+        vtol_climb.control_rates:T_cruise_rate2    array(12) N/s**2   
+        vtol_climb.control_comp.control_boundary_values:T_cruise     array(2) N        
+        vtol_climb.control_comp.control_boundary_rates:T_cruise_rate     array(2) N/s      
+        vtol_climb.control_comp.control_boundary_rates:T_cruise_rate2     array(2) N/s**2   
+        vtol_climb.control_values:k_electric    array(12) -        
+        vtol_climb.control_rates:k_electric_rate    array(12) 1/s      
+        vtol_climb.control_rates:k_electric_rate2    array(12) 1/s**2   
+        vtol_climb.control_comp.control_boundary_values:k_electric     array(2) -        
+        vtol_climb.control_comp.control_boundary_rates:k_electric_rate     array(2) 1/s      
+        vtol_climb.control_comp.control_boundary_rates:k_electric_rate2     array(2) 1/s**2   
+        vtol_climb.control_values:alpha_deg    array(12) deg      
+        vtol_climb.control_rates:alpha_deg_rate    array(12) deg/s    
+        vtol_climb.control_rates:alpha_deg_rate2    array(12) deg/s**2 
+        vtol_climb.control_comp.control_boundary_values:alpha_deg     array(2) deg      
+        vtol_climb.control_comp.control_boundary_rates:alpha_deg_rate     array(2) deg/s    
+        vtol_climb.control_comp.control_boundary_rates:alpha_deg_rate2     array(2) deg/s**2 
+        vtol_climb.states:x            array(5) m        
+        vtol_climb.states:h            array(5) m        
+        vtol_climb.states:v            array(5) m/s      
+        vtol_climb.states:m            array(5) kg       
+        vtol_climb.states:SOC          array(5) -        
+        vtol_climb.interleave_comp.all_values:states:x    array(12) m        Values of states:x at all nodes
+        vtol_climb.interleave_comp.all_values:state_rates:x    array(12) m/s      Values of state_rates:x at all nodes
+        vtol_climb.interleave_comp.all_values:states:h    array(12) m        Values of states:h at all nodes
+        vtol_climb.interleave_comp.all_values:state_rates:h    array(12) m/s      Values of state_rates:h at all nodes
+        vtol_climb.interleave_comp.all_values:states:v    array(12) m/s      Values of states:v at all nodes
+        vtol_climb.interleave_comp.all_values:state_rates:v    array(12) m/s**2   Values of state_rates:v at all nodes
+        vtol_climb.interleave_comp.all_values:states:m    array(12) kg       Values of states:m at all nodes
+        vtol_climb.interleave_comp.all_values:state_rates:m    array(12) kg/s     Values of state_rates:m at all nodes
+        vtol_climb.interleave_comp.all_values:states:SOC    array(12) -        Values of states:SOC at all nodes
+        vtol_climb.interleave_comp.all_values:state_rates:SOC    array(12) 1/s      Values of state_rates:SOC at all nodes
+        vtol_climb.t_initial_val              0 s        
+        vtol_climb.t_duration_val             1 s        
+        vtol_climb.parameter_vals:path_heading_deg            0 deg      
+        vtol_climb.parameter_vals:wind_speed_ref            5 m/s      
+        vtol_climb.parameter_vals:wind_heading_deg           45 deg      
+        vtol_climb.parameter_vals:ground_elevation         2906 m        
+        vtol_climb.parameter_vals:S_ref            0 m**2     
+        vtol_climb.parameter_vals:C_D0            0 -        
+        vtol_climb.parameter_vals:A_rotor            0 m**2     
+        vtol_climb.parameter_vals:E_batt_J            0 J        
+        vtol_climb.parameter_vals:AR            0 -        
+        vtol_climb.parameter_vals:arch_weights     array(6) -        
+        vtol_climb.rhs_col.x_dot       array(4) m/s      
+        vtol_climb.rhs_col.h_dot       array(4) m/s      
+        vtol_climb.rhs_col.v_dot       array(4) m/s**2   
+        vtol_climb.rhs_col.m_dot       array(4) kg/s     
+        vtol_climb.rhs_col.SOC_dot     array(4) 1/s      
+        vtol_climb.rhs_col.gamma       array(4) rad      
+        vtol_climb.rhs_col.C_L         array(4) -        
+        vtol_climb.rhs_col.P_shaft     array(4) W        
+        vtol_climb.rhs_col.P_elec_bus     array(4) W        
+        vtol_climb.rhs_col.fuel_flow     array(4) kg/s     
+        vtol_climb.rhs_col.agl         array(4) m        Height above ground, for terrain clearance
+        vtol_climb.rhs_col.ground_elev_used     array(4) m        Terrain height the clearance constraint used
+        vtol_climb.rhs_disc.x_dot      array(8) m/s      
+        vtol_climb.rhs_disc.h_dot      array(8) m/s      
+        vtol_climb.rhs_disc.v_dot      array(8) m/s**2   
+        vtol_climb.rhs_disc.m_dot      array(8) kg/s     
+        vtol_climb.rhs_disc.SOC_dot     array(8) 1/s      
+        vtol_climb.rhs_disc.gamma      array(8) rad      
+        vtol_climb.rhs_disc.C_L        array(8) -        
+        vtol_climb.rhs_disc.P_shaft     array(8) W        
+        vtol_climb.rhs_disc.P_elec_bus     array(8) W        
+        vtol_climb.rhs_disc.fuel_flow     array(8) kg/s     
+        vtol_climb.rhs_disc.agl        array(8) m        Height above ground, for terrain clearance
+        vtol_climb.rhs_disc.ground_elev_used     array(8) m        Terrain height the clearance constraint used
+        vtol_climb.state_interp.state_col:x     array(4) m        Interpolated values of state x at collocation nodes
+        vtol_climb.state_interp.staterate_col:x     array(4) m/s      Interpolated rate of state x at collocation nodes
+        vtol_climb.state_interp.state_col:h     array(4) m        Interpolated values of state h at collocation nodes
+        vtol_climb.state_interp.staterate_col:h     array(4) m/s      Interpolated rate of state h at collocation nodes
+        vtol_climb.state_interp.state_col:v     array(4) m/s      Interpolated values of state v at collocation nodes
+        vtol_climb.state_interp.staterate_col:v     array(4) m/s**2   Interpolated rate of state v at collocation nodes
+        vtol_climb.state_interp.state_col:m     array(4) kg       Interpolated values of state m at collocation nodes
+        vtol_climb.state_interp.staterate_col:m     array(4) kg/s     Interpolated rate of state m at collocation nodes
+        vtol_climb.state_interp.state_col:SOC     array(4) -        Interpolated values of state SOC at collocation node
+        vtol_climb.state_interp.staterate_col:SOC     array(4) 1/s      Interpolated rate of state SOC at collocation nodes
+        vtol_climb.t                  array(12) s        
+        vtol_climb.t_phase            array(12) s        
+        vtol_climb.dt_dstau           array(12) s        
+        vtol_climb.timeseries.time    array(12) s        
+        vtol_climb.timeseries.time_phase    array(12) s        
+        vtol_climb.timeseries.T_vtol    array(12) N        
+        vtol_climb.timeseries.T_cruise    array(12) N        
+        vtol_climb.timeseries.k_electric    array(12) -        
+        vtol_climb.timeseries.alpha_deg    array(12) deg      
+        vtol_climb.timeseries.x       array(12) m        
+        vtol_climb.timeseries.h       array(12) m        
+        vtol_climb.timeseries.v       array(12) m/s      
+        vtol_climb.timeseries.m       array(12) kg       
+        vtol_climb.timeseries.SOC     array(12) -        
+        vtol_land.collocation_constraint.defects:x     array(4) m        Interior defects of state x
+        vtol_land.collocation_constraint.defects:h     array(4) m        Interior defects of state h
+        vtol_land.collocation_constraint.defects:v     array(4) m/s      Interior defects of state v
+        vtol_land.collocation_constraint.defects:m     array(4) kg       Interior defects of state m
+        vtol_land.collocation_constraint.defects:SOC     array(4) -        Interior defects of state SOC
+        vtol_land.continuity_comp.defect_controls:T_vtol     array(3) N        Continuity constraint values for control T_vtol
+        vtol_land.continuity_comp.defect_control_rates:T_vtol_rate     array(3) N/s      Consistency constraint values for control T_vtol der
+        vtol_land.continuity_comp.defect_controls:T_cruise     array(3) N        Continuity constraint values for control T_cruise
+        vtol_land.continuity_comp.defect_control_rates:T_cruise_rate     array(3) N/s      Consistency constraint values for control T_cruise d
+        vtol_land.continuity_comp.defect_controls:k_electric     array(3) -        Continuity constraint values for control k_electric
+        vtol_land.continuity_comp.defect_control_rates:k_electric_rate     array(3) 1/s      Consistency constraint values for control k_electric
+        vtol_land.continuity_comp.defect_controls:alpha_deg     array(3) deg      Continuity constraint values for control alpha_deg
+        vtol_land.continuity_comp.defect_control_rates:alpha_deg_rate     array(3) deg/s    Consistency constraint values for control alpha_deg 
+        vtol_land.control_values:T_vtol    array(12) N        
+        vtol_land.control_rates:T_vtol_rate    array(12) N/s      
+        vtol_land.control_rates:T_vtol_rate2    array(12) N/s**2   
+        vtol_land.control_comp.control_boundary_values:T_vtol     array(2) N        
+        vtol_land.control_comp.control_boundary_rates:T_vtol_rate     array(2) N/s      
+        vtol_land.control_comp.control_boundary_rates:T_vtol_rate2     array(2) N/s**2   
+        vtol_land.control_values:T_cruise    array(12) N        
+        vtol_land.control_rates:T_cruise_rate    array(12) N/s      
+        vtol_land.control_rates:T_cruise_rate2    array(12) N/s**2   
+        vtol_land.control_comp.control_boundary_values:T_cruise     array(2) N        
+        vtol_land.control_comp.control_boundary_rates:T_cruise_rate     array(2) N/s      
+        vtol_land.control_comp.control_boundary_rates:T_cruise_rate2     array(2) N/s**2   
+        vtol_land.control_values:k_electric    array(12) -        
+        vtol_land.control_rates:k_electric_rate    array(12) 1/s      
+        vtol_land.control_rates:k_electric_rate2    array(12) 1/s**2   
+        vtol_land.control_comp.control_boundary_values:k_electric     array(2) -        
+        vtol_land.control_comp.control_boundary_rates:k_electric_rate     array(2) 1/s      
+        vtol_land.control_comp.control_boundary_rates:k_electric_rate2     array(2) 1/s**2   
+        vtol_land.control_values:alpha_deg    array(12) deg      
+        vtol_land.control_rates:alpha_deg_rate    array(12) deg/s    
+        vtol_land.control_rates:alpha_deg_rate2    array(12) deg/s**2 
+        vtol_land.control_comp.control_boundary_values:alpha_deg     array(2) deg      
+        vtol_land.control_comp.control_boundary_rates:alpha_deg_rate     array(2) deg/s    
+        vtol_land.control_comp.control_boundary_rates:alpha_deg_rate2     array(2) deg/s**2 
+        vtol_land.states:x             array(5) m        
+        vtol_land.states:h             array(5) m        
+        vtol_land.states:v             array(5) m/s      
+        vtol_land.states:m             array(5) kg       
+        vtol_land.states:SOC           array(5) -        
+        vtol_land.interleave_comp.all_values:states:x    array(12) m        Values of states:x at all nodes
+        vtol_land.interleave_comp.all_values:state_rates:x    array(12) m/s      Values of state_rates:x at all nodes
+        vtol_land.interleave_comp.all_values:states:h    array(12) m        Values of states:h at all nodes
+        vtol_land.interleave_comp.all_values:state_rates:h    array(12) m/s      Values of state_rates:h at all nodes
+        vtol_land.interleave_comp.all_values:states:v    array(12) m/s      Values of states:v at all nodes
+        vtol_land.interleave_comp.all_values:state_rates:v    array(12) m/s**2   Values of state_rates:v at all nodes
+        vtol_land.interleave_comp.all_values:states:m    array(12) kg       Values of states:m at all nodes
+        vtol_land.interleave_comp.all_values:state_rates:m    array(12) kg/s     Values of state_rates:m at all nodes
+        vtol_land.interleave_comp.all_values:states:SOC    array(12) -        Values of states:SOC at all nodes
+        vtol_land.interleave_comp.all_values:state_rates:SOC    array(12) 1/s      Values of state_rates:SOC at all nodes
+        vtol_land.t_initial_val               0 s        
+        vtol_land.t_duration_val              1 s        
+        vtol_land.parameter_vals:path_heading_deg            0 deg      
+        vtol_land.parameter_vals:wind_speed_ref            5 m/s      
+        vtol_land.parameter_vals:wind_heading_deg           45 deg      
+        vtol_land.parameter_vals:ground_elevation         2906 m        
+        vtol_land.parameter_vals:S_ref            0 m**2     
+        vtol_land.parameter_vals:C_D0            0 -        
+        vtol_land.parameter_vals:A_rotor            0 m**2     
+        vtol_land.parameter_vals:E_batt_J            0 J        
+        vtol_land.parameter_vals:AR            0 -        
+        vtol_land.parameter_vals:arch_weights     array(6) -        
+        vtol_land.rhs_col.x_dot        array(4) m/s      
+        vtol_land.rhs_col.h_dot        array(4) m/s      
+        vtol_land.rhs_col.v_dot        array(4) m/s**2   
+        vtol_land.rhs_col.m_dot        array(4) kg/s     
+        vtol_land.rhs_col.SOC_dot      array(4) 1/s      
+        vtol_land.rhs_col.gamma        array(4) rad      
+        vtol_land.rhs_col.C_L          array(4) -        
+        vtol_land.rhs_col.P_shaft      array(4) W        
+        vtol_land.rhs_col.P_elec_bus     array(4) W        
+        vtol_land.rhs_col.fuel_flow     array(4) kg/s     
+        vtol_land.rhs_col.agl          array(4) m        Height above ground, for terrain clearance
+        vtol_land.rhs_col.ground_elev_used     array(4) m        Terrain height the clearance constraint used
+        vtol_land.rhs_disc.x_dot       array(8) m/s      
+        vtol_land.rhs_disc.h_dot       array(8) m/s      
+        vtol_land.rhs_disc.v_dot       array(8) m/s**2   
+        vtol_land.rhs_disc.m_dot       array(8) kg/s     
+        vtol_land.rhs_disc.SOC_dot     array(8) 1/s      
+        vtol_land.rhs_disc.gamma       array(8) rad      
+        vtol_land.rhs_disc.C_L         array(8) -        
+        vtol_land.rhs_disc.P_shaft     array(8) W        
+        vtol_land.rhs_disc.P_elec_bus     array(8) W        
+        vtol_land.rhs_disc.fuel_flow     array(8) kg/s     
+        vtol_land.rhs_disc.agl         array(8) m        Height above ground, for terrain clearance
+        vtol_land.rhs_disc.ground_elev_used     array(8) m        Terrain height the clearance constraint used
+        vtol_land.state_interp.state_col:x     array(4) m        Interpolated values of state x at collocation nodes
+        vtol_land.state_interp.staterate_col:x     array(4) m/s      Interpolated rate of state x at collocation nodes
+        vtol_land.state_interp.state_col:h     array(4) m        Interpolated values of state h at collocation nodes
+        vtol_land.state_interp.staterate_col:h     array(4) m/s      Interpolated rate of state h at collocation nodes
+        vtol_land.state_interp.state_col:v     array(4) m/s      Interpolated values of state v at collocation nodes
+        vtol_land.state_interp.staterate_col:v     array(4) m/s**2   Interpolated rate of state v at collocation nodes
+        vtol_land.state_interp.state_col:m     array(4) kg       Interpolated values of state m at collocation nodes
+        vtol_land.state_interp.staterate_col:m     array(4) kg/s     Interpolated rate of state m at collocation nodes
+        vtol_land.state_interp.state_col:SOC     array(4) -        Interpolated values of state SOC at collocation node
+        vtol_land.state_interp.staterate_col:SOC     array(4) 1/s      Interpolated rate of state SOC at collocation nodes
+        vtol_land.t                   array(12) s        
+        vtol_land.t_phase             array(12) s        
+        vtol_land.dt_dstau            array(12) s        
+        vtol_land.timeseries.time     array(12) s        
+        vtol_land.timeseries.time_phase    array(12) s        
+        vtol_land.timeseries.T_vtol    array(12) N        
+        vtol_land.timeseries.T_cruise    array(12) N        
+        vtol_land.timeseries.k_electric    array(12) -        
+        vtol_land.timeseries.alpha_deg    array(12) deg      
+        vtol_land.timeseries.x        array(12) m        
+        vtol_land.timeseries.h        array(12) m        
+        vtol_land.timeseries.v        array(12) m/s      
+        vtol_land.timeseries.m        array(12) kg       
+        vtol_land.timeseries.SOC      array(12) -        

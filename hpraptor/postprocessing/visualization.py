@@ -14,7 +14,7 @@ Matplotlib-based visualization suite for hybrid VTOL energy analysis:
 All figures follow publication conventions (serif fonts, labeled
 axes, proper legends) suitable for Q1 journal submissions.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ try:
 except ImportError:
     HAS_MPL = False
 
-from hpraptor.m4_propulsion.hybrid_energy import HybridMissionResult, HybridSegmentResult
-from hpraptor.m4_propulsion.battery_model import BatteryState
-from hpraptor.m4_propulsion.fuel_model import FuelState
-from hpraptor.m4_propulsion.vehicles import HybridVTOLConfig
+from hpraptor.m5_propulsion.hybrid_energy import HybridMissionResult, HybridSegmentResult
+from hpraptor.m5_propulsion.battery_model import BatteryState
+from hpraptor.m5_propulsion.fuel_model import FuelState
+from hpraptor.m5_propulsion.vehicles import HybridVTOLConfig
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -504,6 +504,108 @@ def plot_mission_dashboard(result: HybridMissionResult,
 
     fig.suptitle(title or f"Hybrid Propulsion Dashboard: {vehicle.name}",
                  fontsize=15, weight='bold', y=0.98)
+
+    if save_path:
+        fig.savefig(save_path)
+    return fig
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DEM + FLIGHT PATH VISUAL CHECK (m1_mission)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def plot_dem_with_path(dem, path=None, terrain_report=None,
+                       title: str = None, save_path: str = None) -> Optional[plt.Figure]:
+    """
+    Visual sanity check for a DEM and (optionally) a flight path over it.
+
+    Left panel: terrain elevation map (hillshade-shaded if available) with
+    the flight path ground track overlaid and origin/destination marked.
+    Right panel: elevation profile along the direct origin->destination
+    line vs. the flight path's actual altitude, so terrain-following
+    behavior can be checked by eye.
+
+    Parameters
+    ----------
+    dem : DEMInterface
+    path : FlightPath, optional
+        If given, its ground track and altitude profile are overlaid.
+    terrain_report : TerrainReport, optional
+        If given, min AGL / feasibility are annotated on the plot.
+    """
+    if not HAS_MPL:
+        return None
+    _setup_style()
+
+    fig, (ax_map, ax_profile) = plt.subplots(1, 2, figsize=(14, 6))
+
+    # ── Left: terrain map ──
+    extent = [dem.metadata.lon_min, dem.metadata.lon_max,
+             dem.metadata.lat_min, dem.metadata.lat_max]
+    im = ax_map.imshow(dem.elev_grid, origin='lower', extent=extent,
+                       cmap='terrain', aspect='auto')
+    cbar = fig.colorbar(im, ax=ax_map, shrink=0.85)
+    cbar.set_label('Elevation [m AMSL]')
+
+    if dem.slope_deg is not None:
+        ax_map.contour(dem.lon_grid, dem.lat_grid, dem.elev_grid,
+                       levels=12, colors='k', linewidths=0.3, alpha=0.4)
+
+    if path is not None:
+        wp = path.get_waypoints_array()
+        ax_map.plot(wp[:, 1], wp[:, 0], color='crimson', linewidth=2.0,
+                   label='Flight path ground track')
+        ax_map.scatter([path.origin[1]], [path.origin[0]], marker='^', s=90,
+                      color='white', edgecolor='k', zorder=5, label='Origin')
+        ax_map.scatter([path.destination[1]], [path.destination[0]], marker='v', s=90,
+                      color='white', edgecolor='k', zorder=5, label='Destination')
+        ax_map.legend(loc='upper left', fontsize=8)
+
+    ax_map.set_xlabel('Longitude [deg]')
+    ax_map.set_ylabel('Latitude [deg]')
+    ax_map.set_title(f'DEM (source: {dem.metadata.source})')
+
+    # ── Right: elevation profile ──
+    if path is not None:
+        wp = path.get_waypoints_array()
+        dist_km = wp[:, 4] / 1000.0
+        terrain_elev = dem.elevation_batch(wp[:, 0], wp[:, 1])
+
+        ax_profile.plot(dist_km, terrain_elev, color='saddlebrown',
+                        linewidth=1.5, label='Terrain elevation')
+        ax_profile.fill_between(dist_km, 0, terrain_elev, color='saddlebrown', alpha=0.2)
+        ax_profile.plot(dist_km, wp[:, 2], color='crimson', linewidth=2.0,
+                        label='Flight path altitude')
+
+        y_min = min(np.nanmin(terrain_elev), wp[:, 2].min()) - 50
+        y_max = max(np.nanmax(terrain_elev), wp[:, 2].max()) + 50
+        ax_profile.set_ylim(y_min, y_max)
+        ax_profile.set_xlabel('Distance along path [km]')
+        ax_profile.set_ylabel('Elevation [m AMSL]')
+        ax_profile.legend(loc='best', fontsize=9)
+
+        if terrain_report is not None:
+            status = "FEASIBLE" if terrain_report.is_feasible else "INFEASIBLE"
+            ax_profile.set_title(
+                f'Elevation profile — {status} '
+                f'(min AGL: {terrain_report.min_agl:.0f} m, '
+                f'{terrain_report.n_violations} violations)'
+            )
+        else:
+            ax_profile.set_title('Elevation profile')
+    else:
+        profile = dem.terrain_profile(
+            (dem.metadata.lat_min, dem.metadata.lon_min),
+            (dem.metadata.lat_max, dem.metadata.lon_max), n=200
+        )
+        ax_profile.plot(profile['distances'] / 1000.0, profile['elevations'],
+                        color='saddlebrown')
+        ax_profile.set_xlabel('Distance [km]')
+        ax_profile.set_ylabel('Elevation [m AMSL]')
+        ax_profile.set_title('Terrain profile (SW -> NE corner)')
+
+    fig.suptitle(title or 'DEM Visual Check', fontsize=14, weight='bold')
+    fig.tight_layout()
 
     if save_path:
         fig.savefig(save_path)

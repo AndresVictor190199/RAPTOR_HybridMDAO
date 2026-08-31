@@ -189,6 +189,68 @@ class PathBuilder:
 
     # ── Strategy: HIGH OVERFLY ───────────────────────────────────────────
 
+    def _fit_angles_to_route(
+        self,
+        total_dist: float,
+        fw_climb: float,
+        fw_descent: float,
+        climb_angle: float,
+        descent_angle: float,
+        reserved_dist: float = 0.0,
+        min_cruise: float = 200.0,
+    ) -> Tuple[float, float, bool]:
+        """
+        Steepen climb/descent angles until the vertical profile fits the route.
+
+        Shallow angles are cheaper in energy, but only available if the route
+        is long enough to fly them. When it is not, budgeting cruise as
+        ``max(total - departure - arrival, floor)`` silently produces a ground
+        track LONGER than the route: the aircraft "arrives" kilometres past
+        the destination, and every distance-derived energy number downstream
+        is then computed for a flight that does not connect the two pads.
+
+        Steepening keeps the path anchored to its endpoints instead. Both
+        angles scale by the same factor on their tangents, so the climb and
+        descent stay in proportion, and each is capped at the airframe limit.
+
+        Returns
+        -------
+        (climb_angle_deg, descent_angle_deg, fits)
+            `fits` is False when even the airframe's maximum angles cannot
+            close the geometry — the route is genuinely too short for this
+            cruise altitude, which is a mission-design problem, not something
+            the builder should paper over.
+        """
+        available = total_dist - reserved_dist - min_cruise
+        if available <= 0:
+            return climb_angle, descent_angle, False
+
+        def ground_run(alt: float, angle_deg: float) -> float:
+            if alt <= 0:
+                return 0.0
+            return alt / np.tan(np.radians(angle_deg))
+
+        needed = (ground_run(fw_climb, climb_angle) +
+                  ground_run(fw_descent, descent_angle))
+        if needed <= available:
+            return climb_angle, descent_angle, True
+
+        # d = alt / tan(theta), so scaling every tangent by needed/available
+        # scales the total run back down to exactly the distance we have.
+        ratio = needed / available
+        climb_fitted = min(
+            np.degrees(np.arctan(np.tan(np.radians(climb_angle)) * ratio)),
+            self.uav.fw_max_climb_angle,
+        )
+        descent_fitted = min(
+            np.degrees(np.arctan(np.tan(np.radians(descent_angle)) * ratio)),
+            self.uav.fw_max_descent_angle,
+        )
+
+        fits = (ground_run(fw_climb, climb_fitted) +
+                ground_run(fw_descent, descent_fitted)) <= available
+        return float(climb_fitted), float(descent_fitted), fits
+
     def _build_high_overfly(
         self,
         origin: FacilityNode,
@@ -252,11 +314,31 @@ class PathBuilder:
             ground_distance=self.uav.vtol_transition_distance,
         ))
 
+        # Descent geometry is needed before the climb is committed, so the
+        # two angles can be fitted to the route together.
+        total_descent = cruise_alt - destination.ground_elev
+        vtol_descent = total_descent * vtol_ascend_fraction
+        fw_descent = total_descent - vtol_descent
+
+        # Ground distance already spent on VTOL/transition before FW climb.
+        reserved = sum(s.kinematics.ground_distance for s in path.segments)
+        climb_angle, descent_angle, fits = self._fit_angles_to_route(
+            total_dist, fw_climb, fw_descent,
+            climb_angle=min(8.0, self.uav.fw_max_climb_angle * 0.6),
+            descent_angle=min(6.0, self.uav.fw_max_descent_angle * 0.5),
+            reserved_dist=reserved + self.uav.vtol_transition_distance,
+            min_cruise=100.0,
+        )
+        if not fits:
+            print(f"  [WARN] HIGH_OVERFLY: {total_dist / 1000:.1f} km is too short to "
+                  f"climb {fw_climb:.0f} m and descend {fw_descent:.0f} m even at "
+                  f"maximum angles; the path will not close on the destination.")
+
         # FW climb to cruise altitude
         if fw_climb > 10:
             path.add_segment(FWClimb(
                 altitude_gain=fw_climb,
-                climb_angle_deg=min(8.0, self.uav.fw_max_climb_angle * 0.6),
+                climb_angle_deg=climb_angle,
                 airspeed=cruise_airspeed * 0.9,
             ))
 
@@ -266,11 +348,6 @@ class PathBuilder:
             s.kinematics.ground_distance for s in path.segments
         )
 
-        # Estimate arrival distance
-        total_descent = cruise_alt - destination.ground_elev
-        vtol_descent = total_descent * vtol_ascend_fraction
-        fw_descent = total_descent - vtol_descent
-        descent_angle = min(6.0, self.uav.fw_max_descent_angle * 0.5)
         arrival_dist = (
             fw_descent / np.tan(np.radians(descent_angle)) +
             self.uav.vtol_transition_distance
@@ -483,10 +560,6 @@ class PathBuilder:
         # Cruise just above the highest point
         cruise_alt = max_terrain + self.constraints.min_cruise_terrain_clearance
 
-        # Use gentle angles for efficiency
-        climb_angle = min(5.0, self.uav.fw_max_climb_angle * 0.35)
-        descent_angle = min(4.0, self.uav.fw_max_descent_angle * 0.35)
-
         path = FlightPath(
             origin.lat, origin.lon, origin.ground_elev,
             destination.lat, destination.lon, destination.ground_elev,
@@ -498,6 +571,23 @@ class PathBuilder:
         # Minimal VTOL (just enough for safe transition)
         vtol_up = min(50.0, total_climb * 0.2)
         vtol_down = min(50.0, total_descent * 0.2)
+
+        # Gentle angles are the point of this strategy, but they are only
+        # affordable if the route is long enough to fly them — otherwise the
+        # profile would overrun the destination (see _fit_angles_to_route).
+        climb_angle, descent_angle, fits = self._fit_angles_to_route(
+            total_dist,
+            fw_climb=total_climb - vtol_up - self.uav.vtol_transition_alt_change,
+            fw_descent=total_descent - vtol_down - self.uav.vtol_transition_alt_change,
+            climb_angle=min(5.0, self.uav.fw_max_climb_angle * 0.35),
+            descent_angle=min(4.0, self.uav.fw_max_descent_angle * 0.35),
+            reserved_dist=2 * self.uav.vtol_transition_distance,
+            min_cruise=200.0,
+        )
+        if not fits:
+            print(f"  [WARN] MINIMAL_ENERGY: {total_dist / 1000:.1f} km is too short "
+                  f"for a {total_climb:.0f} m climb and {total_descent:.0f} m descent "
+                  f"even at maximum angles; the path will not close on the destination.")
 
         # Departure
         path.add_segment(VTOLAscend(

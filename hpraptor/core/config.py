@@ -189,4 +189,12 @@ class MissionConstraints:
         """Return the applicable terrain clearance for a segment type."""
         if segment_type in ("FW_CRUISE",):
             return self.min_cruise_terrain_clearance
+        if segment_type in ("VTOL_ASCEND", "VTOL_DESCEND"):
+            # No horizontal displacement during these segments (see
+            # VTOLAscend/VTOLDescend kinematics) — the terrain directly
+            # below is the origin/destination pad itself, a known, cleared
+            # vertiport. Requiring the same 50 m clearance meant for flying
+            # over unknown terrain would flag every normal takeoff/landing
+            # as a violation.
+            return 0.0
         return self.min_terrain_clearance

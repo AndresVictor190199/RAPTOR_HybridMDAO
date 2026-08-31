@@ -28,14 +28,29 @@ _LAPSE = -0.0065   # temperature lapse rate in troposphere [K/m]
 
 
 def isa_temperature(altitude_m: float) -> float:
-    """ISA temperature at altitude [K]."""
+    """
+    ISA temperature at altitude [K].
+
+    Three evaluation paths, all agreeing on real inputs:
+      - CasADi symbolic: smooth twice-differentiable max (avoids Hessian NaNs).
+      - Complex (OpenMDAO complex-step differentiation): the floor is applied
+        by comparing the REAL part only. Python's built-in max() raises on
+        complex operands, and comparing the perturbed value would branch on
+        the step itself and destroy the derivative.
+      - Real: plain max, unchanged.
+    """
     if hasattr(altitude_m, 'is_symbolic') or 'casadi' in str(type(altitude_m)):
         import casadi as ca
         # Smooth twice-differentiable approximation of max(_T0 + _LAPSE * altitude_m, 200.0) to avoid Hessian NaNs
         T_raw = _T0 + _LAPSE * altitude_m
         return 0.5 * (T_raw + 200.0 + ca.sqrt((T_raw - 200.0) ** 2 + 0.01))
-    else:
-        return max(_T0 + _LAPSE * altitude_m, 200.0)
+
+    T_raw = _T0 + _LAPSE * altitude_m
+    if np.iscomplexobj(T_raw):
+        # 0.0 * T_raw keeps the complex dtype while giving the clamped
+        # region a correctly-zero derivative.
+        return np.where(np.real(T_raw) > 200.0, T_raw, 200.0 + 0.0 * T_raw)
+    return max(T_raw, 200.0)
 
 
 def isa_pressure(altitude_m: float) -> float:

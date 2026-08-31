@@ -1,27 +1,125 @@
 # configs/quito_mission.yaml
+# =============================================================================
+# Mission-Driven Configuration for Hybrid VTOL UAV Sizing & Trajectory
+# =============================================================================
+#
+# This file defines EVERYTHING needed to initialize the project from scratch:
+#   1. Where to fly (origin, destination, corridor)
+#   2. What to carry (payload, mission type)
+#   3. How to fly (cruise speed, altitude strategy)
+#   4. Which architectures to evaluate
+#   5. Optional geometry overrides (if you already know some parameters)
+#
+# Usage:
+#   python run_mission.py configs/quito_mission.yaml
+#   python run_mission.py configs/quito_mission.yaml --architecture series
+#   python run_mission.py configs/quito_mission.yaml --sweep-all
+
 mission:
-  name: "Quito Valley Corridor Hospital-to-Hospital Transit"
-  description: "Mountainous flight corridor from H. Enrique Garcés to H. Metropolitano in Quito, Ecuador."
+  name: "Quito Basin to Cumbaya Valley Inter-Hospital Transit"
+  description: >
+    Mountainous medical cargo corridor from Hospital Enrique Garces, in the
+    southern Quito basin, to Hospital de los Valles in the Cumbaya valley.
+    The route crosses the ridge separating the two valleys, so it combines a
+    610 m net descent with a terrain barrier that must be overflown: a
+    genuinely hard case for a hybrid VTOL, and the reason this corridor was
+    chosen over a shorter intra-basin hop.
+
+    Range 13.6 km. Corridor relief 1657 m (2242-3899 m AMSL). Terrain is
+    measured NASADEM (1 arc-second, EGM96 geoid) - there is no synthetic
+    terrain anywhere in this framework.
+
+  # --- Origin and Destination ---
+  # altitude_amsl values are NASADEM measurements at these exact coordinates,
+  # cross-checked against SRTMGL1 (agreement within 5 m). They act only as a
+  # fallback: with a DEM loaded, run_mission anchors pad elevations to the
+  # DEM itself (see _dem_anchored_ground_elev) so clearance checks and pad
+  # altitudes always come from one consistent terrain model.
   origin:
     name: "Hospital Enrique Garces"
     latitude: -0.2444
     longitude: -78.5411
-    altitude_amsl: 3009.0
+    altitude_amsl: 2905.9
   destination:
-    name: "Hospital Metropolitano"
-    latitude: -0.1844
-    longitude: -78.5037
-    altitude_amsl: 2838.0
-  corridor:
-    lat_min: -0.25
-    lat_max: -0.18
-    lon_min: -78.55
-    lon_max: -78.50
+    name: "Hospital de los Valles"
+    latitude: -0.2084
+    longitude: -78.4245
+    altitude_amsl: 2295.9
+
+  # --- DEM corridor ---
+  # There is no separate corridor to configure: the bounding box is always
+  # auto-derived from the origin/destination coordinates above (+25% margin
+  # so off-line terrain features like a ridge are still captured). See
+  # MissionDefinition.corridor / derive_corridor_bounds() in mission_loader.py.
+  # For this route that yields lat [-0.2534, -0.1994], lon [-78.5703, -78.3953]
+  # - a 3.2:1 corridor, which is why the DEM grid is non-square by default.
+
+  # --- Mission Requirements (THESE DRIVE SIZING) ---
+  requirements:
+    payload_kg: 5.0              # Medical cargo mass [kg]
+    cruise_speed_ms: 30.0        # Target cruise airspeed [m/s]
+    cruise_altitude_strategy: "auto"  # "auto" = from terrain + clearance, or a fixed value [m AMSL]
+    endurance_min: null           # null = range mission (not endurance-limited)
+    design_range_km: 50.0         # Design range for vehicle sizing [km]
+    design_endurance_min: 60.0    # Design endurance for vehicle sizing [min]
+    vtol_climb_rate_ms: 3.0      # Desired VTOL climb rate [m/s]
+    vtol_descent_rate_ms: 2.5    # Desired VTOL descent rate [m/s]
+    fw_climb_angle_deg: 8.0      # Fixed-wing climb angle [deg]
+    # "auto" = build HIGH_OVERFLY/TERRAIN_FOLLOW/MINIMAL_ENERGY, evaluate
+    # each through m5 energy analysis, and keep whichever consumes the
+    # least total energy (subject to terrain clearance feasibility).
+    # Set to "high_overfly" / "terrain_follow" / "minimal_energy" to force
+    # one strategy instead of comparing.
+    path_strategy: "auto"
+
+  # --- Which architectures to evaluate ---
+  # Options: all_electric, series, parallel, series_parallel, turbo_electric, fuel_cell
+  # Use "all" to sweep every architecture
+  architectures:
+    - series
+    - parallel
+    - fuel_cell
+
+  # --- Optional sizing overrides ---
+  # Set to null to let the analytical sizer compute from first principles.
+  # Set to a value to force that parameter (useful for parametric studies).
+  overrides:
+    mtow_kg: null                # null = auto-compute from payload fraction
+    wing_loading_pa: null        # null = auto from constraint diagram [N/m²]
+    disk_loading_pa: 300.0       # Rotor disk loading [N/m²] — affects rotor size
+    payload_fraction: 0.10       # Statistical payload mass fraction [-]
+    empty_weight_fraction: 0.25  # NON-wing empty fraction [-] (fuselage/tail/gear/
+                                  # avionics). Wing structural mass is computed
+                                  # separately from real geometry+loads and added on top.
+
+  # --- Operational constraints ---
   constraints:
-    min_terrain_clearance: 50.0  # m AGL
-    min_cruise_terrain_clearance: 100.0  # m AGL
-    min_battery_soc: 0.15
-    min_fuel_reserve: 0.10
+    min_terrain_clearance: 50.0    # m AGL — absolute minimum
+    min_cruise_terrain_clearance: 100.0  # m AGL — during cruise
+    min_battery_soc: 0.15          # 15% battery reserve
+    min_fuel_reserve: 0.10         # 10% fuel reserve
+    max_flight_time: 7200.0        # s (2 hours max)
+
+  # --- Wind model ---
+  # Feeds hpraptor.m1_mission.wind_model.WindModel, which is used by
+  # HybridEnergyManager to convert commanded airspeed -> groundspeed
+  # (headwind slows groundspeed for a given ground track -> more energy
+  # burned per segment; tailwind does the opposite).
   wind:
-    headwind_speed: 5.0  # m/s
-    wind_direction_deg: 45.0  # deg
+    headwind_speed: 5.0        # m/s reference wind speed
+    wind_direction_deg: 45.0   # deg, direction wind blows FROM (0 = North, 90 = East)
+    use_log_profile: true      # true = scale wind with altitude AGL (boundary layer)
+    z_0: 0.1                   # roughness length [m] (0.1 = open agricultural land)
+    h_ref: 10.0                # reference altitude for headwind_speed [m]
+
+  # --- DEM cache location (relative to project root) ---
+  # run_mission.py always (re)builds/validates the DEM at this path against
+  # the auto-derived corridor. A cache hit requires matching bounds AND
+  # source AND resolution, so changing any of them rebuilds rather than
+  # silently reusing a stale file.
+  #
+  # Default source is 'auto': NASADEM via OpenTopography when
+  # OPENTOPOGRAPHY_API_KEY is set, otherwise the keyless OpenTopoData SRTM
+  # server. Default resolution is 'native' - the dataset's own 1 arc-second
+  # posting, which for this corridor is 195 x 631 cells (~31 m).
+  dem_path: "data/dem/quito_cumbaya_corridor.npz"

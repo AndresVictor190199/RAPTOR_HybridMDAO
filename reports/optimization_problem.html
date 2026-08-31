@@ -1,0 +1,1000 @@
+<title>The Optimization Problem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Ink-forward technical document. Colour is reserved for two
+   jobs: naming which discipline owns a variable, and flagging
+   constraint status. Nothing is coloured decoratively.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --paper:       #F7F8FA;
+  --surface:     #FFFFFF;
+  --surface-alt: #EEF0F4;
+  --ink:         #14161C;
+  --ink-soft:    #333846;
+  --muted:       #5C6376;
+  --faint:       #8E96A8;
+  --rule:        #D8DCE4;
+  --rule-strong: #B4BAC7;
+
+  --accent:      #3D4A9E;
+  --accent-soft: #E7E9F6;
+
+  /* Discipline hues — one per module, used everywhere a variable appears */
+  --d-terrain:   #2E7D5B;
+  --d-geometry:  #2563A8;
+  --d-structure: #7A4FBF;
+  --d-aero:      #0E7C86;
+  --d-prop:      #B85C0A;
+  --d-mass:      #A93A5B;
+
+  --ok:          #2E7D5B;
+  --ok-soft:     #E3F0E9;
+  --active:      #B07A00;
+  --active-soft: #FBF0D6;
+  --bad:         #B0263C;
+  --bad-soft:    #FADFE3;
+
+  --shadow: 0 1px 2px rgba(20,22,28,.05), 0 8px 20px rgba(20,22,28,.05);
+  --measure: 70ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:       #0E1013;
+    --surface:     #16191F;
+    --surface-alt: #1E222A;
+    --ink:         #E8EAF0;
+    --ink-soft:    #C3C8D4;
+    --muted:       #949BAC;
+    --faint:       #6C7385;
+    --rule:        #262B34;
+    --rule-strong: #3A414E;
+
+    --accent:      #97A3F0;
+    --accent-soft: #1A1E33;
+
+    --d-terrain:   #6BC79C;
+    --d-geometry:  #79B0EC;
+    --d-structure: #BFA2F0;
+    --d-aero:      #5FC4CE;
+    --d-prop:      #EFA35C;
+    --d-mass:      #EE87A3;
+
+    --ok:          #6BC79C;
+    --ok-soft:     #13251D;
+    --active:      #E5B75A;
+    --active-soft: #2A2213;
+    --bad:         #F08A9B;
+    --bad-soft:    #2C161B;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:       #0E1013;
+  --surface:     #16191F;
+  --surface-alt: #1E222A;
+  --ink:         #E8EAF0;
+  --ink-soft:    #C3C8D4;
+  --muted:       #949BAC;
+  --faint:       #6C7385;
+  --rule:        #262B34;
+  --rule-strong: #3A414E;
+
+  --accent:      #97A3F0;
+  --accent-soft: #1A1E33;
+
+  --d-terrain:   #6BC79C;
+  --d-geometry:  #79B0EC;
+  --d-structure: #BFA2F0;
+  --d-aero:      #5FC4CE;
+  --d-prop:      #EFA35C;
+  --d-mass:      #EE87A3;
+
+  --ok:          #6BC79C;
+  --ok-soft:     #13251D;
+  --active:      #E5B75A;
+  --active-soft: #2A2213;
+  --bad:         #F08A9B;
+  --bad-soft:    #2C161B;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16.5px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 26px 110px; }
+.col  { max-width: var(--measure); margin-inline: auto; }
+.wide { max-width: 1140px; margin-inline: auto; }
+
+h1, h2, h3 { font-family: "IBM Plex Serif", Georgia, serif; text-wrap: balance; margin: 0; }
+
+/* ── Masthead ─────────────────────────────────────────────── */
+.masthead { padding: 66px 0 30px; border-bottom: 2px solid var(--ink); }
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px; letter-spacing: .15em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 16px;
+}
+.masthead h1 {
+  font-size: clamp(2.4rem, 5.6vw, 3.7rem); font-weight: 600;
+  line-height: 1.04; letter-spacing: -.02em;
+}
+.standfirst {
+  font-size: 1.16rem; color: var(--ink-soft); max-width: 62ch;
+  margin-top: 18px; font-weight: 300;
+}
+.meta {
+  display: flex; flex-wrap: wrap; gap: 9px 26px; margin-top: 26px;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted);
+}
+.meta b { color: var(--ink); font-weight: 500; }
+
+/* ── Sections ─────────────────────────────────────────────── */
+section { padding-top: 58px; }
+.sec-head { display: flex; gap: 16px; align-items: baseline; margin-bottom: 6px; }
+.sec-num {
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 600;
+  color: var(--accent); padding-top: 7px; flex: none;
+}
+section h2 {
+  font-size: clamp(1.55rem, 3vw, 2.05rem); font-weight: 600; letter-spacing: -.012em;
+}
+.sec-sub { color: var(--muted); font-size: 1rem; margin: 4px 0 24px 28px; max-width: 62ch; }
+h3 { font-size: 1.2rem; font-weight: 600; margin: 34px 0 11px; }
+h4 {
+  font-family: "IBM Plex Sans", sans-serif; font-size: .88rem; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+  margin: 26px 0 9px;
+}
+
+p { margin: 0 0 16px; }
+a { color: var(--accent); text-underline-offset: 2px; }
+strong { font-weight: 600; }
+code {
+  font-family: "IBM Plex Mono", monospace; font-size: .86em;
+  background: var(--surface-alt); padding: .1em .36em; border-radius: 3px;
+}
+ul, ol { margin: 0 0 16px; padding-left: 21px; }
+li { margin-bottom: 7px; }
+li::marker { color: var(--faint); }
+
+/* ── Math statement ───────────────────────────────────────── */
+.math {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 5px; padding: 26px 30px; margin: 26px 0;
+  box-shadow: var(--shadow); overflow-x: auto;
+}
+.math .line {
+  font-family: "IBM Plex Mono", monospace; font-size: 14px; line-height: 2.0;
+  white-space: nowrap; color: var(--ink);
+}
+.math .lbl {
+  display: inline-block; min-width: 8.5em; color: var(--muted);
+  font-family: "IBM Plex Sans", sans-serif; font-size: 13px;
+  letter-spacing: .03em; text-transform: uppercase;
+}
+.math .cmt { color: var(--faint); font-style: italic; }
+
+/* ── Code ─────────────────────────────────────────────────── */
+.code {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent); border-radius: 4px;
+  overflow-x: auto; margin: 20px 0; box-shadow: var(--shadow);
+}
+.code-label {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  padding: 9px 16px 0;
+}
+.code pre {
+  margin: 0; padding: 9px 16px 15px; font-family: "IBM Plex Mono", monospace;
+  font-size: 12.4px; line-height: 1.62; color: var(--ink-soft); white-space: pre;
+}
+.code pre .c { color: var(--faint); font-style: italic; }
+.code pre .k { color: var(--accent); font-weight: 500; }
+
+/* ── Tables ───────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; margin: 20px 0; }
+table {
+  width: 100%; border-collapse: collapse; font-size: 14px;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+}
+th {
+  text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--muted); padding: 10px 12px;
+  border-bottom: 2px solid var(--rule-strong); white-space: nowrap;
+}
+td {
+  padding: 9px 12px; border-bottom: 1px solid var(--rule);
+  vertical-align: top; color: var(--ink-soft);
+}
+tbody tr:last-child td { border-bottom: none; }
+td.num, th.num {
+  text-align: right; font-variant-numeric: tabular-nums;
+  font-family: "IBM Plex Mono", monospace; font-size: 12.6px; white-space: nowrap;
+}
+td.sym {
+  font-family: "IBM Plex Mono", monospace; font-size: 12.8px;
+  color: var(--ink); font-weight: 500; white-space: nowrap;
+}
+td.idx {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+  color: var(--faint); white-space: nowrap;
+}
+tr.hi td { background: var(--accent-soft); }
+tr.sub td { background: var(--surface-alt); font-weight: 600; color: var(--ink); }
+
+/* Discipline tag */
+.disc {
+  display: inline-block; font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 500; letter-spacing: .04em;
+  padding: 1px 6px; border-radius: 3px; white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.d1 { color: var(--d-terrain); }
+.d2 { color: var(--d-geometry); }
+.d3 { color: var(--d-structure); }
+.d4 { color: var(--d-aero); }
+.d5 { color: var(--d-prop); }
+.d6 { color: var(--d-mass); }
+
+.pill {
+  display: inline-block; font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px; padding: 1px 7px; border-radius: 3px;
+  border: 1px solid currentColor; white-space: nowrap;
+}
+.p-ok { color: var(--ok); background: var(--ok-soft); }
+.p-act { color: var(--active); background: var(--active-soft); }
+.p-bad { color: var(--bad); background: var(--bad-soft); }
+.p-n { color: var(--muted); background: var(--surface-alt); border-color: var(--rule-strong); }
+
+/* ── Callouts ─────────────────────────────────────────────── */
+.note {
+  border-radius: 4px; padding: 16px 19px; margin: 22px 0; font-size: 15px;
+  border: 1px solid var(--rule); border-left-width: 3px; background: var(--surface);
+}
+.note p:last-child { margin-bottom: 0; }
+.note .nt {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; display: block; margin-bottom: 6px;
+}
+.note.ok  { border-left-color: var(--ok); background: var(--ok-soft); }
+.note.ok .nt { color: var(--ok); }
+.note.warn { border-left-color: var(--active); background: var(--active-soft); }
+.note.warn .nt { color: var(--active); }
+.note.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+.note.bad .nt { color: var(--bad); }
+.note.info { border-left-color: var(--accent); background: var(--accent-soft); }
+.note.info .nt { color: var(--accent); }
+
+/* ── Stats ────────────────────────────────────────────────── */
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+  border-radius: 4px; overflow: hidden; margin: 24px 0;
+}
+.stat { background: var(--surface); padding: 16px 17px; }
+.stat .v {
+  font-family: "IBM Plex Serif", serif; font-size: 1.75rem; font-weight: 600;
+  color: var(--accent); line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.stat .l {
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); margin-top: 4px;
+}
+
+/* ── Diagram ──────────────────────────────────────────────── */
+.diagram { margin: 28px 0; overflow-x: auto; }
+.diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+
+footer {
+  margin-top: 74px; padding-top: 24px; border-top: 2px solid var(--ink);
+  font-size: 13px; color: var(--muted);
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media (max-width: 640px) {
+  body { font-size: 15.5px; }
+  .wrap { padding: 0 16px 70px; }
+  .sec-sub { margin-left: 0; }
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead col">
+  <div class="eyebrow">RAPTOR HybridMDAO · Formulation</div>
+  <h1>The Optimization Problem</h1>
+  <p class="standfirst">
+    Every variable the optimizer touches — geometric, aerodynamic, propulsion,
+    mass, energy and trajectory — where each one enters, and exactly how far the
+    integration has got.
+  </p>
+  <div class="meta">
+    <span><b>Coupled problem</b> 369 variables · 328 constraints</span>
+    <span><b>Sizing alone</b> 13 variables · 8 constraints</span>
+    <span><b>Coupled</b> yes — one loop, 369 variables</span>
+    <span><b>Updated</b> 26 Aug 2026</span>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="stage">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">00</span><h2>Where the integration actually stands</h2></div>
+
+    <p>
+      The two levels are now <strong>one optimization</strong>. The sizing group and the
+      five-phase trajectory share a single design space: vehicle properties flow
+      sizing&nbsp;&rarr;&nbsp;trajectory, and the energy, state of charge and mass the
+      trajectory integrates flow back as the objective and the storage constraints.
+      The uncoupled studies remain runnable on purpose — they are what the coupled
+      answer is checked against.
+    </p>
+    <div class="note warn">
+      <span class="nt">Status, stated plainly</span>
+      <p>
+        The coupled problem <strong>builds, runs, and returns feasible designs</strong> —
+        <code>m_init_error</code> lands on zero, so the trajectory really does start at the
+        mass the sizer built, and every inequality is satisfied. But SLSQP has
+        <strong>not once reached its KKT tolerance</strong>: every run so far exits on the
+        iteration limit (713, 800 and 1019 iterations in three attempts).
+      </p>
+      <p>
+        Worse, a warm start from the uncoupled optimum landed on a <em>worse</em>
+        objective (48.2 Wh) than a cold start (28.6 Wh), which says the coupled
+        problem has multiple basins and the driver is wandering between them rather
+        than descending. Treat the coupled numbers below as feasible designs, not as
+        optima, until that is fixed — the likely remedies are a proper NLP solver
+        (IPOPT/SNOPT via pyoptsparse) and better scaling, not more iterations.
+      </p>
+    </div>
+  </div>
+
+  <div class="wide diagram">
+    <svg viewBox="0 0 1120 340" role="img" aria-label="Two-level structure: m1 terrain feeds both the static sizing MDO and the trajectory optimal control problem, but the sizing outputs do not yet feed the trajectory.">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 1 L9 5 L0 9 z" fill="var(--rule-strong)"/>
+        </marker>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 1 L9 5 L0 9 z" fill="var(--bad)"/>
+        </marker>
+      </defs>
+      <g font-family="IBM Plex Sans, sans-serif">
+        <!-- m1 -->
+        <rect x="10" y="120" width="196" height="106" rx="5" fill="var(--surface)" stroke="var(--d-terrain)" stroke-width="1.6"/>
+        <text x="24" y="143" font-size="10.5" font-family="IBM Plex Mono, monospace" fill="var(--d-terrain)">m1_mission</text>
+        <text x="24" y="166" font-size="14.5" font-weight="600" fill="var(--ink)">Terrain</text>
+        <text x="24" y="187" font-size="11.5" fill="var(--muted)">NASADEM, 31 m posting</text>
+        <text x="24" y="204" font-size="11.5" fill="var(--muted)">range, pads, ridge height</text>
+        <text x="24" y="219" font-size="11.5" fill="var(--muted)">terrain(x) model</text>
+
+        <!-- sizing -->
+        <rect x="330" y="24" width="330" height="128" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="346" y="47" font-size="10.5" font-family="IBM Plex Mono, monospace" fill="var(--accent)">LEVEL 1</text>
+        <text x="346" y="70" font-size="15" font-weight="600" fill="var(--ink)">Static sizing MDO</text>
+        <text x="346" y="91" font-size="11.5" fill="var(--muted)">12 design variables, 5 constraints</text>
+        <text x="346" y="108" font-size="11.5" fill="var(--muted)">m2 + m3 + m4 + m5 coupled by NLBGS</text>
+        <text x="346" y="125" font-size="11.5" fill="var(--muted)">picks the vehicle: S_ref, AR, battery…</text>
+        <text x="346" y="142" font-size="11.5" fill="var(--d-terrain)">g5 holds cruise above the ridge</text>
+
+        <!-- trajectory -->
+        <rect x="330" y="196" width="330" height="128" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+        <text x="346" y="219" font-size="10.5" font-family="IBM Plex Mono, monospace" fill="var(--accent)">LEVEL 2</text>
+        <text x="346" y="242" font-size="15" font-weight="600" fill="var(--ink)">Trajectory OCP</text>
+        <text x="346" y="263" font-size="11.5" fill="var(--muted)">361 variables, 96 g + 224 h</text>
+        <text x="346" y="280" font-size="11.5" fill="var(--muted)">dymos, 5 phases, Gauss-Lobatto</text>
+        <text x="346" y="297" font-size="11.5" fill="var(--muted)">flies the vehicle it is handed</text>
+        <text x="346" y="314" font-size="11.5" fill="var(--d-terrain)">AGL path constraint vs terrain(x)</text>
+
+        <!-- m1 arrows -->
+        <path d="M206 158 C 265 158, 275 90, 324 90" fill="none" stroke="var(--d-terrain)" stroke-width="1.6" marker-end="url(#a1)"/>
+        <path d="M206 190 C 265 190, 275 258, 324 258" fill="none" stroke="var(--d-terrain)" stroke-width="1.6" marker-end="url(#a1)"/>
+
+        <!-- missing link -->
+        <path d="M495 156 L 495 190" fill="none" stroke="var(--bad)" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#a2)"/>
+        <text x="512" y="178" font-size="12" font-weight="600" fill="var(--bad)">not connected</text>
+
+        <!-- consequence -->
+        <rect x="700" y="96" width="410" height="152" rx="5" fill="var(--bad-soft)" stroke="var(--bad)" stroke-width="1.2"/>
+        <text x="716" y="120" font-size="11" font-family="IBM Plex Mono, monospace" fill="var(--bad)">THE REMAINING GAP</text>
+        <text x="716" y="143" font-size="12.5" fill="var(--ink)">Level 1 sizes a 9.54 kg aircraft:</text>
+        <text x="730" y="163" font-size="12" font-family="IBM Plex Mono, monospace" fill="var(--ink-soft)">S_ref 0.312 m²  AR 14.0  L/D 18.4</text>
+        <text x="716" y="188" font-size="12.5" fill="var(--ink)">Level 2 flies a typed-in 20 kg one:</text>
+        <text x="730" y="208" font-size="12" font-family="IBM Plex Mono, monospace" fill="var(--ink-soft)">S_ref 0.72 m²   AR 10.0  C_D0 0.020</text>
+        <text x="716" y="234" font-size="12" font-style="italic" fill="var(--bad)">Two valid answers about different aircraft.</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="col">
+    <div class="note bad">
+      <span class="nt">Read this before using any trajectory number</span>
+      <p>
+        <code>build_mission_problem()</code> takes <code>S_ref</code>, <code>AR</code>, <code>C_D0</code>,
+        <code>A_rotor</code>, <code>E_batt_wh</code> and <code>m_initial_kg</code> as <em>typed defaults</em>, not as
+        outputs of the sizing optimizer. So the trajectory currently flies a 20 kg
+        aircraft with a 0.72 m² wing, while the sizer says the right answer is
+        9.54 kg with 0.312 m². Each result is self-consistent; they describe
+        different vehicles.
+      </p>
+      <p>
+        Closing this is one wiring change — pass the sizing result into the
+        trajectory builder — plus a re-validation of the trajectory at the smaller
+        vehicle's much lower power levels. It is the next piece of work, and until
+        it is done the two levels should be read separately.
+      </p>
+    </div>
+    <p>
+      What <em>is</em> integrated, as of this session: <strong>m1 terrain now drives both
+      levels</strong>. Level 1 gets range, pad elevation and the ridge height that bounds
+      cruise altitude; Level 2 gets a differentiable <code>terrain(x)</code> model that its AGL
+      path constraint is evaluated against. Before, neither knew the ridge existed.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="statement">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Level 1 — the statement</h2></div>
+    <p class="sec-sub">Static sizing MDO, in the standard form.</p>
+  </div>
+
+  <div class="wide">
+    <div class="math">
+      <div class="line"><span class="lbl">minimize</span> f(x) = E<sub>mission</sub>(x) + λ · Σ<sub>i</sub> w<sub>i</sub>(x)·(1 − w<sub>i</sub>(x))<span class="cmt">   λ = 200 Wh</span></div>
+      <div class="line"><span class="lbl">by varying</span> x<sub>i</sub><sup>L</sup> ≤ x<sub>i</sub> ≤ x<sub>i</sub><sup>U</sup>,   i = 1 … 12</div>
+      <div class="line"><span class="lbl">subject to</span> g<sub>j</sub>(x) ≤ 0,   j = 1 … 5</div>
+      <div class="line"><span class="lbl"></span> h(x) = 0 <span class="cmt">— the mass-closure loop, converged by NonlinearBlockGS rather than handed to the driver</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p>
+      The equality is worth a note. Mass closure — MTOW feeding geometry and
+      structures, which feed back into mass — is a genuine algebraic loop. It could
+      be posed as an equality constraint with MTOW as a design variable. Here it is
+      instead converged <em>inside</em> each function evaluation by a Gauss–Seidel
+      solver with Aitken relaxation, so the driver never sees it. That keeps the
+      design space at 12 variables instead of 13, and it is why <code>n_h = 0</code> at this
+      level.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="dvs">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">02</span><h2>The 12 design variables</h2></div>
+    <p class="sec-sub">Read directly from the live model, so this cannot drift from what is solved.</p>
+  </div>
+
+  <div class="wide tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Index</th><th>Variable</th><th>Meaning</th><th>Discipline</th>
+            <th class="num">Lower</th><th class="num">Upper</th><th class="num">Units</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="idx">x₁</td><td class="sym">wing_loading</td>
+          <td>W/S — sets wing area, since S = W/(W/S)</td>
+          <td><span class="disc d2">m2 geometry</span></td>
+          <td class="num">80</td><td class="num">300</td><td class="num">N/m²</td>
+        </tr>
+        <tr>
+          <td class="idx">x₂</td><td class="sym">AR</td>
+          <td>Wing aspect ratio — drives induced drag and spar loads</td>
+          <td><span class="disc d2">m2 geometry</span></td>
+          <td class="num">6</td><td class="num">14</td><td class="num">–</td>
+        </tr>
+        <tr>
+          <td class="idx">x₃</td><td class="sym">disk_loading</td>
+          <td>Rotor W/A — sets rotor size and hover power</td>
+          <td><span class="disc d2">m2 geometry</span></td>
+          <td class="num">100</td><td class="num">600</td><td class="num">N/m²</td>
+        </tr>
+        <tr>
+          <td class="idx">x₄</td><td class="sym">t_spar_mm</td>
+          <td>Spar wall thickness — the structural sizing variable</td>
+          <td><span class="disc d3">m3 structures</span></td>
+          <td class="num">1</td><td class="num">6</td><td class="num">mm</td>
+        </tr>
+        <tr>
+          <td class="idx">x₅</td><td class="sym">k_electric</td>
+          <td>Commanded share of cruise power drawn from the battery</td>
+          <td><span class="disc d5">m5 propulsion</span></td>
+          <td class="num">0</td><td class="num">1</td><td class="num">–</td>
+        </tr>
+        <tr class="hi">
+          <td class="idx">x₆</td><td class="sym">altitude</td>
+          <td><strong>New.</strong> Cruise altitude AMSL — traded against climb energy, floored by terrain</td>
+          <td><span class="disc d1">m1 terrain</span></td>
+          <td class="num">2905.5</td><td class="num">4625.8</td><td class="num">m</td>
+        </tr>
+        <tr>
+          <td class="idx">x₇…x₁₂</td><td class="sym">z_arch</td>
+          <td>Architecture relaxation — 6-vector fed through a softmax to blending weights</td>
+          <td><span class="disc d5">m5 propulsion</span></td>
+          <td class="num">−6</td><td class="num">+6</td><td class="num">–</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>
+      <code>altitude</code> became a design variable in this session. Its bounds come from
+      the terrain: the lower bound is the departure pad, the upper is 1500 m above
+      the clearance floor. It could not sensibly be a variable before, because
+      nothing in the model knew what altitude was safe.
+    </p>
+    <div class="note info">
+      <span class="nt">z_arch is the framework's novelty</span>
+      <p>
+        Six real numbers pass through a softmax to become weights
+        <code>w = softmax(1.5·z)</code>, and every architecture-dependent quantity — propulsion
+        mass, fuel flow, bus power, fuel LHV, fuel capability — is the weighted blend
+        across all six architectures. Architecture choice becomes a gradient
+        computation instead of six separate discrete runs. The penalty term
+        <code>λ Σ wᵢ(1−wᵢ)</code> vanishes only when the weights are one-hot, which is what
+        forces the answer back to a buildable machine.
+      </p>
+      <p>
+        It has one hazard worth stating: at <code>z = 0</code> all six weights are 1/6 and the
+        penalty gradient is <em>exactly</em> zero by symmetry. A relaxed run must be
+        warm-started from each architecture in turn (<code>--multistart</code>) or it sits on
+        that saddle forever.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="constraints">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">03</span><h2>The 5 constraints</h2></div>
+    <p class="sec-sub">Two are new this session; both were needed for a result to mean anything.</p>
+  </div>
+
+  <div class="wide tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Expression</th><th>What it prevents</th><th>Discipline</th><th class="num">Value at the optimum</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="idx">g₁</td><td class="sym">C_L,cruise/(0.8·C_L,max) − 1 ≤ 0</td>
+          <td>Cruising too close to stall</td>
+          <td><span class="disc d4">m4 aero</span></td>
+          <td class="num">−0.420 <span class="pill p-ok">slack</span></td>
+        </tr>
+        <tr>
+          <td class="idx">g₂</td><td class="sym">E_mission/E_available − 1 ≤ 0</td>
+          <td>A design too small to carry its own mission energy</td>
+          <td><span class="disc d6">energy</span></td>
+          <td class="num">−0.000 <span class="pill p-act">active</span></td>
+        </tr>
+        <tr class="hi">
+          <td class="idx">g₃</td><td class="sym">SOC_reserve − SOC_final ≤ 0</td>
+          <td><strong>New.</strong> Landing below the battery reserve</td>
+          <td><span class="disc d6">energy</span></td>
+          <td class="num">−0.310 <span class="pill p-ok">slack</span></td>
+        </tr>
+        <tr>
+          <td class="idx">g₄</td><td class="sym">σ_max/σ_allow − 1 ≤ 0</td>
+          <td>Spar yielding at limit load</td>
+          <td><span class="disc d3">m3 structures</span></td>
+          <td class="num">−0.703 <span class="pill p-ok">slack</span></td>
+        </tr>
+        <tr class="hi">
+          <td class="idx">g₅</td><td class="sym">(h_terrain,max + 100 − h_cruise)/100 ≤ 0</td>
+          <td><strong>New.</strong> Cruising into the ridge</td>
+          <td><span class="disc d1">m1 terrain</span></td>
+          <td class="num">+0.000 <span class="pill p-act">active</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>
+      Only <strong>g₂ and g₅ are active</strong> at the optimum, and that pair tells the whole
+      story of the design: energy is the binding resource, and terrain sets the
+      altitude. Every solution sits at exactly 3126 m — 100 m above the 3025.8 m
+      ridge — because climb energy pushes the altitude down and g₅ stops it.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="ledger">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Every variable in the model</h2></div>
+    <p class="sec-sub">
+      The 12 design variables above are only what the driver moves. These are the
+      quantities the disciplines compute from them — the full state of the model at
+      the converged optimum, in evaluation order.
+    </p>
+  </div>
+
+  <div class="wide tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Meaning</th><th class="num">Value</th><th class="num">Units</th></tr>
+      </thead>
+      <tbody>
+        <tr class="sub"><td colspan="4"><span class="disc d2">m2 geometry</span> &nbsp; GeometryComp — wraps m2_geometry's real planform, fuselage, rotor and tail routines</td></tr>
+        <tr><td class="sym">S_ref</td><td>Wing reference area, W/(W/S)</td><td class="num">0.312</td><td class="num">m²</td></tr>
+        <tr><td class="sym">span</td><td>Wing span, √(AR·S)</td><td class="num">2.09</td><td class="num">m</td></tr>
+        <tr><td class="sym">chord_mean</td><td>Mean aerodynamic chord</td><td class="num">0.149</td><td class="num">m</td></tr>
+        <tr><td class="sym">wetted_wing</td><td>Wetted wing area, for parasite drag</td><td class="num">0.643</td><td class="num">m²</td></tr>
+        <tr><td class="sym">fuse_length</td><td>Fuselage length, from MTOW statistics</td><td class="num">0.98</td><td class="num">m</td></tr>
+        <tr><td class="sym">fuse_diameter</td><td>Fuselage diameter</td><td class="num">0.163</td><td class="num">m</td></tr>
+        <tr><td class="sym">wetted_fuse</td><td>Wetted fuselage area</td><td class="num">0.50</td><td class="num">m²</td></tr>
+        <tr><td class="sym">rotor_diameter</td><td>Per-rotor diameter from disk loading</td><td class="num">0.547</td><td class="num">m</td></tr>
+        <tr><td class="sym">A_rotor</td><td>Total disk area over 4 rotors</td><td class="num">0.94</td><td class="num">m²</td></tr>
+        <tr><td class="sym">S_h, S_v</td><td>Horizontal and vertical tail areas, by volume coefficient</td><td class="num">0.039 / 0.031</td><td class="num">m²</td></tr>
+        <tr><td class="sym">tail_arm</td><td>Tail moment arm</td><td class="num">0.83</td><td class="num">m</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d3">m3 structures</span> &nbsp; StructuresComp — spar sizing under limit load</td></tr>
+        <tr><td class="sym">spar_mass</td><td>Spar mass from t_spar and span</td><td class="num">1.02</td><td class="num">kg</td></tr>
+        <tr><td class="sym">m_wing_structure</td><td>Spar + ribs + skin</td><td class="num">1.44</td><td class="num">kg</td></tr>
+        <tr><td class="sym">m_empty</td><td>Airframe empty mass — computed here, not in WeightsComp, to avoid a self-referential mass loop</td><td class="num">3.83</td><td class="num">kg</td></tr>
+        <tr><td class="sym">g4_stress_margin</td><td>Constraint g₄</td><td class="num">−0.703</td><td class="num">–</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d4">m4 aero</span> &nbsp; AeroComp — component-buildup drag polar at the cruise condition</td></tr>
+        <tr><td class="sym">C_D0</td><td>Zero-lift drag, from wetted areas and Reynolds number</td><td class="num">0.0244</td><td class="num">–</td></tr>
+        <tr><td class="sym">C_L_cruise</td><td>Lift coefficient needed to hold weight at altitude</td><td class="num">0.454</td><td class="num">–</td></tr>
+        <tr><td class="sym">C_D_cruise</td><td>Total drag coefficient</td><td class="num">0.0247</td><td class="num">–</td></tr>
+        <tr><td class="sym">L_D</td><td>Cruise lift-to-drag ratio</td><td class="num">18.37</td><td class="num">–</td></tr>
+        <tr><td class="sym">D_cruise</td><td>Cruise drag force</td><td class="num">5.09</td><td class="num">N</td></tr>
+        <tr><td class="sym">g1_cl_margin</td><td>Constraint g₁</td><td class="num">−0.420</td><td class="num">–</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d5">m5 propulsion</span> &nbsp; PowerRequiredComp — momentum theory plus profile power</td></tr>
+        <tr><td class="sym">P_hover</td><td>Hover shaft power, κ·W√(W/2ρA) plus blade profile power</td><td class="num">1016</td><td class="num">W</td></tr>
+        <tr><td class="sym">P_cruise</td><td>Cruise shaft power, D·V/η_prop</td><td class="num">204</td><td class="num">W</td></tr>
+        <tr><td class="sym">P_climb</td><td>Climb power, cruise plus the weight-times-rate-of-climb term</td><td class="num">727</td><td class="num">W</td></tr>
+        <tr><td class="sym">P_motor_total</td><td>Motor sized by the most demanding phase, +10%</td><td class="num">1118</td><td class="num">W</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d5">m5 propulsion</span> &nbsp; ArchitectureComp — the continuous relaxation</td></tr>
+        <tr><td class="sym">arch_weights</td><td>softmax(1.5·z_arch) — 6 weights summing to 1</td><td class="num">[0.999, 5×0.0001]</td><td class="num">–</td></tr>
+        <tr><td class="sym">m_propulsion</td><td>Blended powerplant mass from per-component specific powers</td><td class="num">0.223</td><td class="num">kg</td></tr>
+        <tr><td class="sym">fuel_flow</td><td>Blended fuel mass flow at the cruise condition</td><td class="num">≈0</td><td class="num">kg/s</td></tr>
+        <tr><td class="sym">P_elec_bus</td><td>Blended electrical power drawn from the bus</td><td class="num">219</td><td class="num">W</td></tr>
+        <tr><td class="sym">fuel_lhv</td><td>Blended fuel lower heating value</td><td class="num">43.0×10⁶</td><td class="num">J/kg</td></tr>
+        <tr class="hi"><td class="sym">fuel_capable</td><td><strong>New.</strong> Blended ability to burn fuel at all — 0 for all-electric</td><td class="num">0.0006</td><td class="num">–</td></tr>
+        <tr><td class="sym">penalty_discreteness</td><td>Σ wᵢ(1−wᵢ) — the objective's second term</td><td class="num">0.0012</td><td class="num">–</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d6">energy &amp; mass</span> &nbsp; EnergyComp — storage sizing and the mission energy budget</td></tr>
+        <tr><td class="sym">k_effective</td><td><strong>New.</strong> Battery share after architecture gating: 1 − fuel_capable·(1 − k_electric)</td><td class="num">1.000</td><td class="num">–</td></tr>
+        <tr><td class="sym">E_vtol_wh</td><td>Powered-lift energy, P_hover × VTOL time</td><td class="num">20.7</td><td class="num">Wh</td></tr>
+        <tr class="hi"><td class="sym">E_climb_wh</td><td><strong>New.</strong> Climb from pad to cruise altitude — what gives altitude a price</td><td class="num">10.6</td><td class="num">Wh</td></tr>
+        <tr><td class="sym">E_cruise_wh</td><td>Cruise over the range less the climb ground run</td><td class="num">22.7</td><td class="num">Wh</td></tr>
+        <tr><td class="sym">t_climb_s</td><td>Climb duration at an 8° path angle</td><td class="num">53</td><td class="num">s</td></tr>
+        <tr><td class="sym">energy_mission_wh</td><td><strong>The objective's first term</strong></td><td class="num">54.0</td><td class="num">Wh</td></tr>
+        <tr><td class="sym">m_battery</td><td>Larger of energy-sized, power-sized, and the 0.5 kg floor</td><td class="num">0.50</td><td class="num">kg</td></tr>
+        <tr><td class="sym">m_fuel</td><td>Fuel mass, gated by fuel_capable</td><td class="num">0.000</td><td class="num">kg</td></tr>
+        <tr><td class="sym">E_battery_wh / E_fuel_wh</td><td>Installed energy in each store</td><td class="num">63.5 / 0.0</td><td class="num">Wh</td></tr>
+        <tr><td class="sym">energy_available_wh</td><td>Usable shaft energy on board</td><td class="num">54.0</td><td class="num">Wh</td></tr>
+        <tr class="hi"><td class="sym">SOC_final</td><td><strong>New.</strong> Battery state of charge at touchdown</td><td class="num">0.460</td><td class="num">–</td></tr>
+        <tr><td class="sym">g2, g3</td><td>Constraints g₂, g₃</td><td class="num">−0.000 / −0.310</td><td class="num">–</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d1">m1 terrain</span> &nbsp; TerrainClearanceComp — new this session</td></tr>
+        <tr class="hi"><td class="sym">agl_cruise</td><td>Height above the route's highest terrain</td><td class="num">100.0</td><td class="num">m</td></tr>
+        <tr class="hi"><td class="sym">g5_terrain_clearance</td><td>Constraint g₅</td><td class="num">+0.000</td><td class="num">–</td></tr>
+
+        <tr class="sub"><td colspan="4"><span class="disc d6">mass closure</span> &nbsp; WeightsComp — the feedback edge the solver converges</td></tr>
+        <tr><td class="sym">m_tow</td><td>m_empty + m_propulsion + m_battery + m_fuel + payload. <em>Feeds back to geometry.</em></td><td class="num">9.54</td><td class="num">kg</td></tr>
+        <tr><td class="sym">objective</td><td>energy_mission_wh + 200 · penalty_discreteness</td><td class="num">54.2</td><td class="num">–</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>
+      Values are the converged <code>all_electric</code> optimum on the Quito → Cumbayá
+      corridor. The coupling that makes this an MDA rather than a chain is the last
+      row: <code>m_tow</code> is an <em>output</em> promoted to the same name that geometry and
+      structures consume as an <em>input</em>.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="fixed">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">05</span><h2>The SOC gap — what it actually was</h2></div>
+    <p class="sec-sub">Not a missing constraint. A physics error in the energy accounting.</p>
+
+    <p>
+      The previous run reported <code>g2_energy_margin = −0.163</code> for
+      <code>all_electric</code> — comfortably feasible. It was not. <code>EnergyComp</code> credited
+      every design with usable fuel energy regardless of architecture:
+    </p>
+    <div class="code">
+      <div class="code-label">before — no architecture in sight</div>
+<pre>usable_fuel = E_fuel_wh * eta * (<span class="k">1.0</span> - fuel_reserve)
+energy_available_wh = usable_batt + usable_fuel</pre>
+    </div>
+    <p>
+      So the "optimal" all-electric aircraft carried 0.022 kg of gasoline and drew
+      <strong>48.9% of its available energy</strong> from a fuel it had no engine, turbine or
+      fuel cell to burn. On battery alone the same design was
+      <strong>64% short</strong> of the energy its own mission required.
+    </p>
+
+    <div class="code">
+      <div class="code-label">after — gated by what the architecture can actually do</div>
+<pre><span class="c"># 0 for all_electric, 1 for anything with a fuel converter,</span>
+<span class="c"># blended by the same softmax weights as every other quantity.</span>
+_HAS_FUEL_PATH = np.array([<span class="k">0</span>, <span class="k">1</span>, <span class="k">1</span>, <span class="k">1</span>, <span class="k">1</span>, <span class="k">1</span>])
+fuel_capable   = np.sum(w * _HAS_FUEL_PATH)
+
+k_eff       = <span class="k">1.0</span> - fuel_capable * (<span class="k">1.0</span> - k_electric)   <span class="c"># battery takes it all</span>
+m_fuel      = fuel_capable * m_fuel                     <span class="c"># no dead fuel mass</span>
+usable_fuel = fuel_capable * E_fuel_wh * eta * (<span class="k">1.0</span> - fuel_reserve)</pre>
+    </div>
+
+    <div class="note ok">
+      <span class="nt">Why gating beats a hard switch</span>
+      <p>
+        <code>fuel_capable</code> is a blended weight, not an <code>if</code>. A half-weighted
+        architecture blend gets half the fuel capability, so the quantity stays
+        differentiable and the relaxation can still move through it. A branch would
+        have put a discontinuity in the middle of the design space the whole method
+        depends on being smooth.
+      </p>
+    </div>
+
+    <p>
+      <code>SOC_final</code> and constraint <strong>g₃</strong> were added alongside it. Being honest
+      about g₃: the battery is sized to meet its energy requirement <em>including</em> the
+      reserve, so g₃ is satisfied by construction rather than driven by the
+      optimizer. Its job is to make the reserve auditable in every result instead of
+      an implicit property of a formula buried in one component — and to fail loudly
+      if a future change breaks the sizing rule.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="results">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">06</span><h2>All six architectures, flight-valid</h2></div>
+    <p class="sec-sub">Every one satisfies g₂, g₃ and g₅ on the real corridor.</p>
+  </div>
+
+  <div class="wide tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Architecture</th><th class="num">MTOW</th><th class="num">S_ref</th><th class="num">AR</th>
+            <th class="num">L/D</th><th class="num">E required</th><th class="num">E available</th>
+            <th class="num">m_fuel</th><th class="num">SOC end</th><th class="num">h_cruise</th><th class="num">g₅</th></tr>
+      </thead>
+      <tbody>
+        <tr class="hi"><td><strong>all_electric</strong></td><td class="num">9.54</td><td class="num">0.312</td><td class="num">14.0</td><td class="num">18.37</td><td class="num">54.0</td><td class="num">54.0</td><td class="num">0.000</td><td class="num">0.460</td><td class="num">3126</td><td class="num">+0.000</td></tr>
+        <tr><td>turbo_electric</td><td class="num">10.33</td><td class="num">0.338</td><td class="num">14.0</td><td class="num">18.54</td><td class="num">58.2</td><td class="num">66.9</td><td class="num">0.006</td><td class="num">0.540</td><td class="num">3126</td><td class="num">+0.000</td></tr>
+        <tr><td>parallel</td><td class="num">10.50</td><td class="num">0.343</td><td class="num">14.0</td><td class="num">18.57</td><td class="num">59.1</td><td class="num">68.0</td><td class="num">0.007</td><td class="num">0.532</td><td class="num">3126</td><td class="num">+0.000</td></tr>
+        <tr><td>series</td><td class="num">11.00</td><td class="num">0.359</td><td class="num">14.0</td><td class="num">18.67</td><td class="num">61.7</td><td class="num">70.9</td><td class="num">0.007</td><td class="num">0.515</td><td class="num">3126</td><td class="num">+0.000</td></tr>
+        <tr><td>series_parallel</td><td class="num">11.00</td><td class="num">0.359</td><td class="num">14.0</td><td class="num">18.67</td><td class="num">61.7</td><td class="num">70.9</td><td class="num">0.007</td><td class="num">0.515</td><td class="num">3126</td><td class="num">+0.000</td></tr>
+        <tr><td>fuel_cell</td><td class="num">12.10</td><td class="num">0.396</td><td class="num">14.0</td><td class="num">18.88</td><td class="num">67.6</td><td class="num">79.1</td><td class="num">0.003</td><td class="num">0.516</td><td class="num">3126</td><td class="num">+0.000</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <div class="note warn">
+      <span class="nt">Read the ordering carefully</span>
+      <p>
+        All-electric wins on this 13.6 km corridor, and that is the expected result
+        rather than a surprising one: at this range the hybrids carry a powerplant
+        whose mass they never amortise. The comparison is also not quite
+        like-for-like — <code>energy_mission_wh</code> is shaft energy, so the hybrids' figures
+        include conversion losses the battery path does not pay. Treat this table as
+        evidence that every architecture <em>closes</em>, not as a settled ranking.
+      </p>
+      <p>
+        Note also that <code>AR</code> and <code>wing_loading</code> sit on their upper bounds for every
+        architecture. That is the optimizer telling you the bounds are binding, not
+        the physics — a wider design space would give a different answer.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="traj">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Level 2 — the trajectory problem</h2></div>
+    <p class="sec-sub">361 variables, five linked phases, and a real terrain profile underneath.</p>
+  </div>
+
+  <div class="wide">
+    <div class="stats">
+      <div class="stat"><div class="v">361</div><div class="l">design variables</div></div>
+      <div class="stat"><div class="v">96</div><div class="l">inequalities</div></div>
+      <div class="stat"><div class="v">224</div><div class="l">equalities</div></div>
+      <div class="stat"><div class="v">5</div><div class="l">phases</div></div>
+      <div class="stat"><div class="v">48</div><div class="l">clearance nodes</div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p>
+      Each phase contributes a duration, five states at every state node, and four
+      controls at every control node. dymos then adds collocation defect constraints
+      that make the integration consistent, and linkage equalities that make the
+      phases join up.
+    </p>
+  </div>
+
+  <div class="wide tbl-wrap">
+    <table>
+      <thead><tr><th>Per phase</th><th>Symbol</th><th>Meaning</th><th>Discipline</th></tr></thead>
+      <tbody>
+        <tr class="sub"><td colspan="4">States — integrated by the transcription</td></tr>
+        <tr><td class="idx">state</td><td class="sym">x</td><td>Ground distance along the corridor. <strong>Now also the terrain lookup coordinate.</strong></td><td><span class="disc d1">m1 terrain</span></td></tr>
+        <tr><td class="idx">state</td><td class="sym">h</td><td>Altitude AMSL</td><td><span class="disc d1">m6 dynamics</span></td></tr>
+        <tr><td class="idx">state</td><td class="sym">v</td><td>Airspeed in wingborne phases; vertical rate in VTOL phases — which is why it is <em>not</em> linked across those boundaries</td><td><span class="disc d1">m6 dynamics</span></td></tr>
+        <tr><td class="idx">state</td><td class="sym">m</td><td>Vehicle mass, falling as fuel burns</td><td><span class="disc d6">mass</span></td></tr>
+        <tr><td class="idx">state</td><td class="sym">SOC</td><td>Battery state of charge, bounded below at the 0.15 reserve</td><td><span class="disc d6">energy</span></td></tr>
+        <tr class="sub"><td colspan="4">Controls — node-wise design variables</td></tr>
+        <tr><td class="idx">control</td><td class="sym">T_vtol</td><td>Powered-lift rotor thrust</td><td><span class="disc d5">m5 propulsion</span></td></tr>
+        <tr><td class="idx">control</td><td class="sym">T_cruise</td><td>Forward propulsor thrust</td><td><span class="disc d5">m5 propulsion</span></td></tr>
+        <tr><td class="idx">control</td><td class="sym">k_electric</td><td>Instantaneous power split — a full profile here, one scalar in Level 1</td><td><span class="disc d5">m5 propulsion</span></td></tr>
+        <tr><td class="idx">control</td><td class="sym">alpha_deg</td><td>Angle of attack</td><td><span class="disc d4">m4 aero</span></td></tr>
+        <tr class="sub"><td colspan="4">Parameters — fixed during the solve</td></tr>
+        <tr><td class="idx">param</td><td class="sym">S_ref, AR, C_D0, A_rotor, E_batt_J</td><td>The vehicle. <span class="pill p-bad">typed in, not from Level 1</span></td><td><span class="disc d2">m2 / m4</span></td></tr>
+        <tr><td class="idx">param</td><td class="sym">path_heading, wind_speed, wind_heading</td><td>Wind field for the groundspeed correction</td><td><span class="disc d1">m1 wind</span></td></tr>
+        <tr><td class="idx">shared</td><td class="sym">z_arch</td><td>One architecture vector across all five phases — a vehicle cannot change powertrain mid-flight</td><td><span class="disc d5">m5 propulsion</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>Terrain clearance in the trajectory</h3>
+    <p>
+      This was the second gap. Ground elevation had been <strong>one constant per phase</strong> —
+      for cruise, the mean of the two pads, about 2600 m. On a route crossing a
+      3026 m ridge, a trajectory could satisfy a 100 m AGL path constraint while
+      flying <strong>400 m inside the mountain</strong>.
+    </p>
+    <p>
+      The DEM itself cannot go into the ODE: it is a gridded interpolator, and dymos
+      needs something complex-step differentiable. So terrain is fitted as a sum of
+      Gaussian bumps in ground distance —
+      <code>z(x) = Σⱼ wⱼ·exp(−((x − cⱼ)/σ)²) + lift</code> — which <code>exp</code> handles on complex
+      input natively.
+    </p>
+    <div class="note ok">
+      <span class="nt">The fit is deliberately conservative</span>
+      <p>
+        A least-squares fit dips <em>below</em> a sharp ridge by construction, and
+        under-predicting terrain is the one error that matters here — it would
+        licence a trajectory to fly into rock. The whole surface is therefore lifted
+        by the worst under-prediction, making it a verified upper bound everywhere.
+        With 60 centres at σ = 453 m that costs a <strong>15 m lift and 16 m RMS</strong> of
+        extra caution. A polynomial basis needed 175 m of slack for the same
+        guarantee, which is why it was abandoned.
+      </p>
+    </div>
+    <p>
+      Clearance is now a path constraint on <strong>every wingborne phase</strong>, not cruise
+      alone — 48 constrained nodes against the previous 24. Cruise carries the full
+      100 m floor; the transitions carry the mission's 50 m minimum, because they are
+      flown near the pads by design.
+    </p>
+
+    <h3>The solved trajectory</h3>
+    <p>
+      Converged in 536 iterations, all five phases, zero physics violations —
+      <strong>92.5 Wh</strong>, and <strong>4×10⁻⁶ kg of fuel</strong> for an all-electric
+      vehicle (the residue of the softmax's 0.0006 weight on the fuel architectures,
+      not a fuel path).
+    </p>
+  </div>
+
+  <div class="wide tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Phase</th><th class="num">x from</th><th class="num">x to</th>
+            <th class="num">h range</th><th class="num">min AGL</th><th class="num">floor</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="sym">transition_fw</td><td class="num">0</td><td class="num">2147</td>
+            <td class="num">3006 → 3206</td><td class="num">100.0</td><td class="num">50</td>
+            <td><span class="pill p-ok">clear</span></td></tr>
+        <tr class="hi"><td class="sym">cruise</td><td class="num">2147</td><td class="num">12205</td>
+            <td class="num">2498 → 3267</td><td class="num">100.000</td><td class="num">100</td>
+            <td><span class="pill p-act">active</span></td></tr>
+        <tr><td class="sym">transition_bw</td><td class="num">12205</td><td class="num">13584</td>
+            <td class="num">2369 → 2498</td><td class="num">52.2</td><td class="num">50</td>
+            <td><span class="pill p-ok">clear</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <div class="note ok">
+      <span class="nt">The constraint is doing real work</span>
+      <p>
+        Cruise altitude spans <strong>2498 m to 3267 m</strong> — the trajectory climbs over the
+        ridge and descends into the Cumbayá valley, tracking terrain rather than
+        holding one altitude. Minimum AGL lands on <strong>100.000 m</strong>: the vehicle
+        skims the clearance floor exactly where the ridge is highest, which is what an
+        active constraint looks like. With the old constant ground elevation this same
+        trajectory would have been free to fly straight through the mountain.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<section id="next">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">08</span><h2>What is left</h2></div>
+
+    <ol>
+      <li>
+        <strong>Couple the two levels.</strong> The single most valuable next step, and the
+        direct answer to "what stage are we at". Pass the sizing optimum into
+        <code>build_mission_problem()</code> so the trajectory flies the aircraft the sizer
+        chose, then re-validate — the smaller vehicle's power levels are roughly half
+        what the trajectory is currently set up for.
+      </li>
+      <li>
+        <strong>g₃ does not yet drive anything.</strong> The battery is sized to meet its
+        reserve, so the constraint is satisfied by construction. Making battery mass a
+        design variable would turn g₃ into a real driver and let the optimizer trade
+        battery mass against reserve properly.
+      </li>
+      <li>
+        <strong>Bounds are binding.</strong> <code>AR</code> and <code>wing_loading</code> sit on their upper
+        limits for all six architectures. Widen them, or justify them as
+        manufacturing limits — but do not read the current values as an interior
+        optimum.
+      </li>
+      <li>
+        <strong>Shaft energy is not a fair cross-architecture objective.</strong> Comparing
+        hybrids to a battery aircraft on shaft Wh charges the hybrids for conversion
+        losses in a way that a stored-energy or mass-based objective would not.
+      </li>
+      <li>
+        <strong>Two trajectory codepaths still exist.</strong> The CasADi OCP in
+        <code>m7_trajectory/ocp.py</code> remains as an independent reference and has not been
+        retired.
+      </li>
+    </ol>
+  </div>
+</section>
+
+<footer class="col">
+  <p>
+    RAPTOR HybridMDAO · branch <code>feature/hybrid-mdao-optimizer</code> ·
+    corridor Hospital Enrique Garcés → Hospital de los Valles, 13.58 km<br>
+    Formulation read from the live OpenMDAO model; values are converged optima on
+    NASADEM terrain (WGS84 / EGM96, 31 m posting).
+  </p>
+</footer>
+
+</div>

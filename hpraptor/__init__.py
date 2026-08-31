@@ -17,6 +17,36 @@ for OpenMDAO MDAO integration.
 Scale: Full-scale UAVs (10–500 kg MTOW)
 Primary mission: Long-endurance loiter
 
+Module map — role in the mission sizing loop
+---------------------------------------------
+    Mission Profile (m1) -> Power Demand & Energy (m5) ->
+    Battery/Motor/Fuel Mass (m5) -> Wing Area & Rotor Geometry (m2) ->
+    Wing Structural Mass (m3) -> Parasite Drag (m4) -> back to Power (m5)
+
+    m1_mission    — mission/environment: DEM terrain, wind, flight-path
+                    building (hpraptor.m1_mission)
+    m2_geometry   — wing planform, fuselage, rotor disk geometry; the
+                    single source of truth for vehicle geometry
+                    (hpraptor.m2_geometry)
+    m3_structures — wing spar sizing (stress-margin constraint g4),
+                    structural mass buildup, static-margin/CG check (g5)
+                    (hpraptor.m3_structures)
+    m4_aero       — VLM lift-curve surrogates + parasite drag buildup
+                    from m2's wetted area (hpraptor.m4_aero)
+    m5_propulsion — power/energy models, battery, fuel, propulsion
+                    architectures (hpraptor.m5_propulsion)
+    m6_dynamics   — differentiable 3-DoF equations of motion for
+                    trajectory optimization (hpraptor.m6_dynamics)
+    m7_trajectory — CasADi optimal-control trajectory + continuous
+                    architecture relaxation solver (hpraptor.m7_trajectory)
+    m8_optimizer  — sizing/architecture sweeps and benchmarks
+                    (hpraptor.m8_optimizer)
+
+    hpraptor.core.initial_sizing.compute_initial_sizing() is where the
+    loop above is actually closed today: an internal fixed-point
+    iteration resolves geometry (m2), structural mass (m3), and
+    parasite drag (m4) against mass/power (m5) until MTOW converges.
+
 Author: Victor (LUAS-EPN / KU Leuven)
 """
 
@@ -32,26 +62,31 @@ from .core.segments import (
     Transition,
 )
 from .core.path import FlightPath, Waypoint, PathMetrics
-from .m4_propulsion.propulsion_system import (
+from .core.mission_loader import (
+    load_mission, MissionDefinition, MissionRequirements,
+    SizingOverrides, FacilityNode as MissionFacilityNode,
+)
+from .core.initial_sizing import compute_initial_sizing, SizingResult
+from .m5_propulsion.propulsion_system import (
     ElectricMotorParams, ICEngineParams, GeneratorParams,
     FuelCellParams, GasTurbineParams, PropellerParams,
     PropulsionSystem,
 )
-from .m4_propulsion.battery_model import (
+from .m5_propulsion.battery_model import (
     BatteryParams, BatteryModel, BatteryState,
     CellChemistry,
 )
-from .m4_propulsion.fuel_model import (
+from .m5_propulsion.fuel_model import (
     FuelTankParams, FuelModel, FuelState, FuelType,
 )
-from .m4_propulsion.vehicles import (
+from .m5_propulsion.vehicles import (
     HybridVTOLConfig,
     get_vehicle, list_vehicle_configs, VEHICLE_CONFIGS,
     all_electric_config, series_hybrid_config, parallel_hybrid_config,
     series_parallel_config, turbo_electric_config,
     fuel_cell_hybrid_config,
 )
-from .m4_propulsion.hybrid_energy import (
+from .m5_propulsion.hybrid_energy import (
     HybridEnergyManager,
     HybridSegmentResult, HybridMissionResult,
     compute_segment_power,
@@ -68,7 +103,7 @@ from .postprocessing.visualization import (
     plot_all,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     # Atmosphere
     "isa_density", "isa_temperature", "isa_pressure", "isa_speed_of_sound",
@@ -92,4 +127,8 @@ __all__ = [
     # Hybrid Energy
     "HybridEnergyManager", "HybridSegmentResult", "HybridMissionResult",
     "compute_segment_power",
+    # Mission-driven pipeline
+    "load_mission", "MissionDefinition", "MissionRequirements",
+    "SizingOverrides", "MissionFacilityNode",
+    "compute_initial_sizing", "SizingResult",
 ]

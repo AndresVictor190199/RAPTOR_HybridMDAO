@@ -1,0 +1,309 @@
+
+%%% Preamble Requirements %%%
+% \usepackage{geometry}
+% \usepackage{amsfonts}
+% \usepackage{amsmath}
+% \usepackage{amssymb}
+% \usepackage{tikz}
+
+% Optional packages such as sfmath set through python interface
+% \usepackage{sfmath}
+
+% \usetikzlibrary{arrows,chains,positioning,scopes,shapes.geometric,shapes.misc,shadows}
+
+%%% End Preamble Requirements %%%
+
+\input{"C:/Users/vic_a/Documents/RAPTOR_HybridMDAO/.venv/Lib/site-packages/pyxdsm/diagram_styles"}
+\begin{tikzpicture}
+
+\matrix[MatrixSetup]{
+%Row 0
+&
+\node [DataIO] (output_mis) {$\text{lat/lon endpoints, DEM}$};&
+\node [DataIO] (output_opt) {$x^{(0)}$};&
+&
+\node [DataIO] (output_geo) {$n_{rotors}$};&
+&
+\node [DataIO] (output_aero) {$\text{airfoil, } Re_{min}$};&
+\node [DataIO] (output_prop) {$\eta_{motor},\ \eta_{prop}$};&
+\node [DataIO] (output_arch) {$\text{6 architectures}$};&
+\node [DataIO] (output_mass) {$\text{cell spec}$};&
+\node [DataIO] (output_traj) {$\text{wind}$};&
+&
+\\
+%Row 1
+\node [DataIO] (left_output_mis) {$\text{corridor profile}$};&
+\node [Function] (mis) {$\text{0: m1 Mission (NASADEM)}$};&
+\node [DataInter] (mis-opt) {$h^{lo},\ h^{hi}$};&
+&
+&
+&
+&
+&
+&
+\node [DataInter] (mis-mass) {$R_{route},\ t_{hover},\ m_{pay}$};&
+\node [DataInter] (mis-traj) {$\text{terrain}(x),\ h_0,\ h_f$};&
+&
+\\
+%Row 2
+\node [DataIO] (left_output_opt) {$x^*$};&
+&
+\node [Optimization] (opt) {$\text{1, 12} \to \text{2: Optimizer (SLSQP)}$};&
+&
+\node [DataInter] (opt-geo) {$W/S,\ AR,\ W/A$};&
+\node [DataInter] (opt-str) {$t_{spar}$};&
+\node [DataInter] (opt-aero) {$AR,\ h_{cruise}$};&
+\node [DataInter] (opt-prop) {$h_{cruise}$};&
+\node [DataInter] (opt-arch) {$z_{arch},\ k_{elec}$};&
+\node [DataInter] (opt-mass) {$m_{bat},\ m_{fuel}$};&
+\node [DataInter] (opt-traj) {$z_{arch},\ \text{node controls}$};&
+&
+\\
+%Row 3
+&
+&
+&
+\node [MDA] (mda) {$\text{2, 9} \to \text{3: MDA (NLBGS)}$};&
+\node [DataInter] (mda-geo) {$m_{TOW}$};&
+\node [DataInter] (mda-str) {$m_{TOW}$};&
+\node [DataInter] (mda-aero) {$m_{TOW}$};&
+\node [DataInter] (mda-prop) {$m_{TOW}$};&
+&
+&
+&
+&
+\\
+%Row 4
+&
+&
+\node [DataInter] (geo-opt) {$g_7$};&
+&
+\node [Function] (geo) {$\text{3: m2 Geometry}$};&
+\node [DataInter] (geo-str) {$S_{ref},\ b$};&
+\node [DataInter] (geo-aero) {$S_{ref},\ S_{wet},\ \bar{c}$};&
+\node [DataInter] (geo-prop) {$A_{rotor}$};&
+&
+&
+\node [DataInter] (geo-traj) {$S_{ref},\ A_{rotor}$};&
+&
+\\
+%Row 5
+&
+&
+\node [DataInter] (str-opt) {$g_4$};&
+&
+&
+\node [Function] (str) {$\text{4: m3 Structures}$};&
+&
+&
+&
+\node [DataInter] (str-mass) {$m_{empty}$};&
+&
+&
+\\
+%Row 6
+&
+&
+\node [DataInter] (aero-opt) {$g_1,\ g_8$};&
+&
+&
+&
+\node [Function] (aero) {$\text{5: m4 Aerodynamics}$};&
+\node [DataInter] (aero-prop) {$D_{cruise}$};&
+&
+&
+\node [DataInter] (aero-traj) {$C_{D0},\ e$};&
+&
+\\
+%Row 7
+&
+&
+&
+&
+&
+&
+&
+\node [Function] (prop) {$\text{6: m5 Propulsion}$};&
+\node [DataInter] (prop-arch) {$P_{cruise},\ P_{motor}$};&
+&
+&
+&
+\\
+%Row 8
+&
+&
+&
+&
+&
+&
+&
+&
+\node [Function] (arch) {$\text{7: m5 Architecture}$};&
+\node [DataInter] (arch-mass) {$m_{prop},\ \eta_{arch}$};&
+\node [DataInter] (arch-traj) {$w_{arch}$};&
+&
+\\
+%Row 9
+&
+&
+\node [DataInter] (mass-opt) {$g_5,\ g_6$};&
+\node [DataInter] (mass-mda) {$m_{TOW}$};&
+&
+&
+&
+&
+&
+\node [Function] (mass) {$\text{8: Energy \& mass closure}$};&
+\node [DataInter] (mass-traj) {$m_{TOW},\ E_{batt}$};&
+\node [DataInter] (mass-clos) {$m_{TOW}$};&
+\\
+%Row 10
+\node [DataIO] (left_output_traj) {$\text{flight path}$};&
+&
+\node [DataInter] (traj-opt) {$g_{AGL},\ g_{C_L}$};&
+&
+&
+&
+&
+&
+&
+&
+\node [MDA] (traj) {$\text{10: m7 Trajectory (dymos)}$};&
+\node [DataInter] (traj-clos) {$SOC_f,\ m_f,\ E$};&
+\\
+%Row 11
+\node [DataIO] (left_output_clos) {$E^*_{primary}$};&
+&
+\node [DataInter] (clos-opt) {$f,\ g_3,\ g_9,\ h_{mass}$};&
+&
+&
+&
+&
+&
+&
+&
+&
+\node [Function] (clos) {$\text{11: Coupling closure}$};&
+\\
+%Row 12
+&
+&
+&
+&
+&
+&
+&
+&
+&
+&
+&
+&
+\\
+};
+
+% XDSM process chains
+{ [start chain=process]
+ \begin{pgfonlayer}{process} 
+\chainin (mis);
+\chainin (opt) [join=by ProcessHVA];
+\chainin (mda) [join=by ProcessHVA];
+\chainin (geo) [join=by ProcessHVA];
+\chainin (str) [join=by ProcessHVA];
+\chainin (aero) [join=by ProcessHVA];
+\chainin (prop) [join=by ProcessHVA];
+\chainin (arch) [join=by ProcessHVA];
+\chainin (mass) [join=by ProcessHVA];
+\chainin (mda) [join=by ProcessHVA];
+\chainin (traj) [join=by ProcessHVA];
+\chainin (clos) [join=by ProcessHVA];
+\chainin (opt) [join=by ProcessHVA];
+\end{pgfonlayer}
+}
+
+\begin{pgfonlayer}{data}
+\path
+% Horizontal edges
+(mis) edge [DataLine] (mis-traj)
+(mis) edge [DataLine] (mis-mass)
+(mis) edge [DataLine] (mis-opt)
+(opt) edge [DataLine] (opt-geo)
+(opt) edge [DataLine] (opt-str)
+(opt) edge [DataLine] (opt-aero)
+(opt) edge [DataLine] (opt-prop)
+(opt) edge [DataLine] (opt-arch)
+(opt) edge [DataLine] (opt-mass)
+(opt) edge [DataLine] (opt-traj)
+(geo) edge [DataLine] (geo-str)
+(geo) edge [DataLine] (geo-aero)
+(geo) edge [DataLine] (geo-prop)
+(aero) edge [DataLine] (aero-prop)
+(prop) edge [DataLine] (prop-arch)
+(str) edge [DataLine] (str-mass)
+(arch) edge [DataLine] (arch-mass)
+(mass) edge [DataLine] (mass-mda)
+(mda) edge [DataLine] (mda-geo)
+(mda) edge [DataLine] (mda-str)
+(mda) edge [DataLine] (mda-aero)
+(mda) edge [DataLine] (mda-prop)
+(geo) edge [DataLine] (geo-traj)
+(aero) edge [DataLine] (aero-traj)
+(arch) edge [DataLine] (arch-traj)
+(mass) edge [DataLine] (mass-traj)
+(traj) edge [DataLine] (traj-clos)
+(mass) edge [DataLine] (mass-clos)
+(clos) edge [DataLine] (clos-opt)
+(str) edge [DataLine] (str-opt)
+(aero) edge [DataLine] (aero-opt)
+(geo) edge [DataLine] (geo-opt)
+(mass) edge [DataLine] (mass-opt)
+(traj) edge [DataLine] (traj-opt)
+(opt) edge [DataLine] (left_output_opt)
+(clos) edge [DataLine] (left_output_clos)
+(traj) edge [DataLine] (left_output_traj)
+(mis) edge [DataLine] (left_output_mis)
+% Vertical edges
+(mis-traj) edge [DataLine] (traj)
+(mis-mass) edge [DataLine] (mass)
+(mis-opt) edge [DataLine] (opt)
+(opt-geo) edge [DataLine] (geo)
+(opt-str) edge [DataLine] (str)
+(opt-aero) edge [DataLine] (aero)
+(opt-prop) edge [DataLine] (prop)
+(opt-arch) edge [DataLine] (arch)
+(opt-mass) edge [DataLine] (mass)
+(opt-traj) edge [DataLine] (traj)
+(geo-str) edge [DataLine] (str)
+(geo-aero) edge [DataLine] (aero)
+(geo-prop) edge [DataLine] (prop)
+(aero-prop) edge [DataLine] (prop)
+(prop-arch) edge [DataLine] (arch)
+(str-mass) edge [DataLine] (mass)
+(arch-mass) edge [DataLine] (mass)
+(mass-mda) edge [DataLine] (mda)
+(mda-geo) edge [DataLine] (geo)
+(mda-str) edge [DataLine] (str)
+(mda-aero) edge [DataLine] (aero)
+(mda-prop) edge [DataLine] (prop)
+(geo-traj) edge [DataLine] (traj)
+(aero-traj) edge [DataLine] (traj)
+(arch-traj) edge [DataLine] (traj)
+(mass-traj) edge [DataLine] (traj)
+(traj-clos) edge [DataLine] (clos)
+(mass-clos) edge [DataLine] (clos)
+(clos-opt) edge [DataLine] (opt)
+(str-opt) edge [DataLine] (opt)
+(aero-opt) edge [DataLine] (opt)
+(geo-opt) edge [DataLine] (opt)
+(mass-opt) edge [DataLine] (opt)
+(traj-opt) edge [DataLine] (opt)
+(mis) edge [DataLine] (output_mis)
+(geo) edge [DataLine] (output_geo)
+(aero) edge [DataLine] (output_aero)
+(prop) edge [DataLine] (output_prop)
+(arch) edge [DataLine] (output_arch)
+(mass) edge [DataLine] (output_mass)
+(traj) edge [DataLine] (output_traj)
+(opt) edge [DataLine] (output_opt);
+\end{pgfonlayer}
+
+\end{tikzpicture}

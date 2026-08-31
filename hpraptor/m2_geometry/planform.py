@@ -1,9 +1,14 @@
 """
-Wing and Tail Geometry Definitions
-===================================
+Wing Geometry Definitions
+===========================
 
-Defines structural and geometric representations of the lifting surfaces
-(main wing and tailplanes) for aerodynamic analysis.
+Defines the geometric representation of the main wing planform — the
+single source of truth for wing geometry consumed by m3_structures
+(spar sizing) and m4_aero (VLM surrogate + parasite drag buildup).
+
+Note: tailplane geometry is not yet implemented here. A real static-
+margin/CG prediction (m3_structures.stability) needs it and currently
+cannot be computed without it — that's a known gap, not an oversight.
 """
 
 from __future__ import annotations
@@ -32,3 +37,13 @@ class WingPlanform:
     def chord_mean(self) -> float:
         """Mean aerodynamic chord [m]."""
         return self.span / self.AR
+
+    @property
+    def wetted_area(self) -> float:
+        """
+        Wetted area (both surfaces) [m²], with a thin-wing correction
+        factor (1 + 0.25*t_c) for the airfoil's curved upper/lower
+        surfaces. Single source of truth — consumed by both
+        m3_structures (skin mass) and m4_aero (parasite drag).
+        """
+        return 2.0 * self.S * (1.0 + 0.25 * self.t_c)
