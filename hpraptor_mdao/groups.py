@@ -167,7 +167,8 @@ class HybridVTOLGroup(om.Group):
                               "k_effective", "energy_mission_wh",
                               "energy_available_wh", "SOC_final",
                               "P_battery_peak_w", "E_battery_used_wh",
-                              "g2_energy_margin", "g6_battery_power"]
+                              "g2_energy_margin", "g6_battery_power",
+                              "g10_fuel_energy", "E_fuel_shaft_required_wh"]
                              + ([("g3_soc_margin", "g3_soc_margin_analytic")]
                                 if opt["coupled"] else ["g3_soc_margin"]),
         )

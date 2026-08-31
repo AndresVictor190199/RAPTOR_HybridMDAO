@@ -318,9 +318,109 @@ def study_xdsm(args) -> Dict:
     return {}
 
 
+
+def study_campaign(args) -> Dict:
+    """
+    Every architecture, both solver paths, in one table.
+
+    This is the results table a methodology section needs: it covers the
+    whole architecture set rather than one point, and it reports the exit
+    status and iteration count of each solve alongside the objective, so a
+    reader can tell a converged optimum from an optimizer that stopped.
+    """
+    from hpraptor_mdao.campaign import (
+        run_campaign, campaign_report, save_campaign,
+    )
+
+    mission, terrain = _mission_and_terrain(args)
+    sources = (("analytical",) if args.aero_source == "analytical"
+               and args.geometry_source == "analytical" and args.quick
+               else ("analytical", "aerosandbox"))
+
+    print("=" * 78)
+    print("ARCHITECTURE CAMPAIGN")
+    print("=" * 78)
+    rows = run_campaign(mission=mission, terrain=terrain,
+                        aero_sources=sources, verbose=True)
+    print()
+    print(campaign_report(rows))
+
+    paths = save_campaign(rows, stem=args.save or "campaign")
+    if "best" in paths:
+        print(f"Best     -> {paths['best']}")
+    print()
+    print(f"Campaign -> {paths['json']}")
+    print(f"Table    -> {paths['table']}")
+    return {"campaign": rows}
+
+
+def study_all(args) -> Dict:
+    """
+    The full reproducible run: campaign, every diagram, every figure.
+
+    Ordered so the cheap, high-information artifacts land first. A run that
+    is interrupted halfway still leaves the results table and the model
+    diagrams on disk, which are the two things hardest to reconstruct from
+    memory.
+    """
+    import subprocess
+    import sys
+
+    def _stage(name: str, fn):
+        print()
+        print("#" * 78)
+        print(f"# {name}")
+        print("#" * 78)
+        try:
+            return fn()
+        except Exception as exc:
+            # A missing optional dependency in one stage must not cost the
+            # other stages -- this command exists to produce everything it
+            # can in one pass.
+            print(f"  !! stage failed: {type(exc).__name__}: {exc}")
+            return None
+
+    out: Dict = {}
+    out["campaign"] = _stage("1/4  Architecture campaign", lambda: study_campaign(args))
+    _stage("2/4  Model diagrams (XDSM + variable inventory)",
+           lambda: study_xdsm(args))
+
+    def _figures():
+        cmds = [
+            [sys.executable, "-m", "hpraptor.postprocessing.trajectory_3d",
+             "--mission", args.mission, "--views", "all", "--interactive"],
+            [sys.executable, "-m", "hpraptor.postprocessing.aircraft_3d",
+             "--result", f"results/{args.save or 'campaign'}_best.json",
+             "--views", "all", "--interactive"],
+        ]
+        for cmd in cmds:
+            print("  $ " + " ".join(cmd[2:]))
+            subprocess.run(cmd, check=False)
+
+    _stage("3/4  3D figures (corridor + vehicle)", _figures)
+
+    def _dashboards():
+        cmd = [sys.executable, "run_mission.py", args.mission,
+               "--architecture", "all", "--visualize", "--quiet"]
+        print("  $ " + " ".join(cmd[1:]))
+        subprocess.run(cmd, check=False)
+
+    _stage("4/4  Per-architecture dashboards (figures/)", _dashboards)
+
+    print()
+    print("=" * 78)
+    print("DONE. Everything written:")
+    print("  results/     campaign.json, campaign_table.txt, per-run JSON")
+    print("  reports/     XDSM diagrams, variable inventory, 3D plates + HTML")
+    print("  figures/     per-architecture dashboards, comparison sweep")
+    print("=" * 78)
+    return out
+
+
 STUDIES = {"sizing": study_sizing, "cruise": study_cruise,
            "mission": study_mission, "coupled": study_coupled,
-           "xdsm": study_xdsm}
+           "xdsm": study_xdsm, "campaign": study_campaign,
+           "all": study_all}
 
 
 def main():
@@ -363,6 +463,9 @@ def main():
                         help="which AeroSandbox solver, when --aero-source "
                              "is aerosandbox. VLM is ~5x slower and meant for "
                              "a verification pass, not a gradient loop")
+    parser.add_argument("--quick", action="store_true",
+                        help="campaign/all: analytical solvers only, for a "
+                             "fast pass over the architecture set")
     parser.add_argument("--save", default=None, metavar="NAME",
                         help="write the result to results/NAME.json")
     args = parser.parse_args()

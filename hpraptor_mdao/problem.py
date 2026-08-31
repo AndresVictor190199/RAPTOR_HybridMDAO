@@ -125,6 +125,28 @@ def build_problem(
     if fixed_architecture is None:
         # THE architecture relaxation design variable.
         model.add_design_var("z_arch", lower=-6.0, upper=6.0)
+    else:
+        # Pinning has to SET z_arch, not merely stop optimizing it.
+        #
+        # Removing it from the design vector alone leaves it at its default
+        # of zeros, and softmax(0) is a uniform 1/6 blend of all six
+        # architectures -- a vehicle with five-sixths of a fuel path and
+        # one-sixth of a battery, which is not any of the six and is not
+        # buildable. Every "pinned" run produced the same meaningless
+        # average regardless of which name was passed.
+        #
+        # The magnitude is chosen so the blend is one-hot to within double
+        # precision: at softmax_temp 1.5, +/-20 leaves the other five
+        # weights summing to ~1e-11. It is deliberately outside the +/-6
+        # relaxation bounds because this is not a relaxed point -- it is the
+        # discrete corner the relaxation is being compared against.
+        if fixed_architecture not in ARCH_NAMES:
+            raise ValueError(
+                f"unknown architecture {fixed_architecture!r}; "
+                f"expected one of {list(ARCH_NAMES)}")
+        z_pinned = np.full(len(ARCH_NAMES), -20.0)
+        z_pinned[ARCH_NAMES.index(fixed_architecture)] = 20.0
+        model.set_input_defaults("z_arch", val=z_pinned)
 
     # ── Objective ────────────────────────────────────────────────────────
     model.add_objective("objective", ref=1000.0)
@@ -141,6 +163,10 @@ def build_problem(
     # its job is to make the reserve auditable in the result instead of an
     # implicit property of a formula buried in EnergyComp.
     model.add_constraint("g3_soc_margin", upper=0.0)      # SOC reserve
+    # The fuel carried must actually supply the share of cruise the battery
+    # does not. Without it the fuel-burning architectures fly on energy that
+    # exists in no tank and costs nothing in the objective.
+    model.add_constraint("g10_fuel_energy", upper=0.0)    # fuel energy balance
     # The pack must be able to DELIVER the hover peak, not merely store the
     # mission. For energy-dense cylindrical cells this is the binding
     # requirement by a factor of several.
@@ -193,6 +219,35 @@ def _initial_z(fixed_architecture: Optional[str], bias: float = 6.0) -> np.ndarr
     return z
 
 
+def solver_stats(prob: om.Problem) -> Dict:
+    """
+    What it cost to converge, read off the driver.
+
+    Recorded on every result because a converged objective on its own does
+    not say whether the optimizer actually satisfied its KKT test or simply
+    ran out of iterations -- and those are different claims. ``exit_status``
+    is the one that distinguishes them; the counts say what it cost.
+    """
+    driver = prob.driver
+    stats: Dict = {}
+    res = getattr(driver, "result", None)
+    if res is not None:
+        for key in ("iter_count", "model_evals", "deriv_evals", "runtime"):
+            stats[key] = getattr(res, key, None)
+        stats["exit_status"] = str(getattr(res, "exit_status", ""))
+    else:                                            # pragma: no cover
+        stats["iter_count"] = getattr(driver, "iter_count", None)
+
+    scipy_res = getattr(driver, "_scipy_optimize_result", None)
+    if scipy_res is not None:
+        stats["nit"] = int(getattr(scipy_res, "nit", -1))
+        stats["nfev"] = int(getattr(scipy_res, "nfev", -1))
+        stats["njev"] = int(getattr(scipy_res, "njev", -1))
+        stats["optimizer_status"] = int(getattr(scipy_res, "status", -1))
+        stats["optimizer_message"] = str(getattr(scipy_res, "message", ""))
+    return stats
+
+
 def run_optimization(prob: om.Problem, verbose: bool = True) -> Dict:
     """Run the driver and collect the results."""
     fail = prob.run_driver()
@@ -213,6 +268,8 @@ def run_optimization(prob: om.Problem, verbose: bool = True) -> Dict:
         "E_battery_used_wh": float(prob.get_val("E_battery_used_wh")[0]),
         "P_battery_peak_w": float(prob.get_val("P_battery_peak_w")[0]),
         "g6_battery_power": float(prob.get_val("g6_battery_power")[0]),
+        "g10_fuel_energy": float(prob.get_val("g10_fuel_energy")[0]),
+        "E_fuel_shaft_required_wh": float(prob.get_val("E_fuel_shaft_required_wh")[0]),
         "g7_rotor_fit": float(prob.get_val("g7_rotor_fit")[0]),
         "g8_reynolds": float(prob.get_val("g8_reynolds")[0]),
         "Re_cruise": float(prob.get_val("Re_cruise")[0]),
@@ -252,6 +309,8 @@ def run_optimization(prob: om.Problem, verbose: bool = True) -> Dict:
     if has_terrain:
         result["g5_terrain_clearance"] = float(prob.get_val("g5_terrain_clearance")[0])
         result["agl_cruise"] = float(prob.get_val("agl_cruise")[0])
+
+    result["solver"] = solver_stats(prob)
 
     if verbose:
         print(_format_result(result))
