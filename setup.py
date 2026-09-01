@@ -64,6 +64,7 @@ setup(
             "hpraptor-mdao=hpraptor_mdao.run:main",
             "hpraptor-dem=hpraptor.m1_mission.srtm_downloader:main",
             "hpraptor-3d=hpraptor.postprocessing.trajectory_3d:main",
+            "hpraptor-serve=hpraptor.postprocessing.serve:main",
         ],
     },
 )
