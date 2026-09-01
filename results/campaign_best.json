@@ -62,7 +62,7 @@
     "iter_count": 53,
     "model_evals": 53,
     "deriv_evals": 34,
-    "runtime": 23.255639099981636,
+    "runtime": 23.69426660001045,
     "exit_status": "SUCCESS",
     "nit": 34,
     "nfev": 52,
@@ -73,5 +73,5 @@
   "architecture": "all_electric",
   "pinned": true,
   "aero": "aerosandbox",
-  "wall_s": 23.26154250005493
+  "wall_s": 23.700740700005554
 }

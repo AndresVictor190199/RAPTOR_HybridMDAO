@@ -130,7 +130,18 @@ def _feature_radius(dem) -> float:
 
 def terrain_surface(dem, frame: CorridorFrame):
     """
-    Build the terrain as a VTK structured grid, carrying true elevation.
+    Build the terrain as PolyData, carrying true elevation.
+
+    Assembled as a StructuredGrid and immediately converted with
+    ``extract_surface()`` rather than handed to the plotter as-is.
+    StructuredGrid renders fine in the offscreen path this module's static
+    plates use, but PyVista's HTML/vtk.js exporter does not convert
+    StructuredGrid correctly -- confirmed against PyVista's own issue
+    tracker, and reproduced here: this corridor's grid is 195x631 =
+    123,045 points, comfortably past the exporter's working range, and the
+    interactive page it produced rendered blank. Every other mesh in this
+    module (tubes, discs, spheres) is already PolyData and exports fine,
+    which is what made the terrain the one suspect.
 
     Elevation is attached as a scalar *before* exaggeration is applied to
     the geometry, so the colour bar and any probe report real metres AMSL
@@ -145,7 +156,7 @@ def terrain_surface(dem, frame: CorridorFrame):
     x, y, z = frame.to_xyz(lat_grid, lon_grid, elev)
     grid = pv.StructuredGrid(x, y, z)
     grid["Elevation [m AMSL]"] = elev.ravel(order="F")
-    return grid
+    return grid.extract_surface(algorithm="dataset_surface")
 
 
 def _segment_polyline(pv, points: np.ndarray):
@@ -516,9 +527,10 @@ def export_scene(dem, path=None, exaggeration: float = 2.5,
     actually clear the ridge?" is best answered by handing them the geometry
     to rotate in ParaView rather than by another rendered angle.
 
-    Terrain goes to ``.vts`` (structured grid) and the path to ``.vtp``
-    (polydata) -- the extensions VTK requires for those two types; a
-    structured grid cannot be written to a generic container.
+    Both go to ``.vtp`` (PolyData). ``terrain_surface`` returns PolyData --
+    see its docstring for why the StructuredGrid it starts from is
+    converted immediately rather than kept -- so a ``.vts`` extension here
+    would now raise.
     """
     lat0 = float(np.mean(dem.lat_grid))
     lon0 = float(np.mean(dem.lon_grid))
@@ -528,7 +540,7 @@ def export_scene(dem, path=None, exaggeration: float = 2.5,
     out.mkdir(parents=True, exist_ok=True)
     written = []
 
-    terrain_path = out / f"{stem}_terrain.vts"
+    terrain_path = out / f"{stem}_terrain.vtp"
     terrain_surface(dem, frame).save(str(terrain_path))
     written.append(str(terrain_path))
 

@@ -63,7 +63,7 @@
       "iter_count": 14,
       "model_evals": 14,
       "deriv_evals": 12,
-      "runtime": 0.12624390004202724,
+      "runtime": 0.16137360001448542,
       "exit_status": "SUCCESS",
       "nit": 12,
       "nfev": 13,
@@ -74,7 +74,7 @@
     "architecture": "all_electric",
     "pinned": true,
     "aero": "analytical",
-    "wall_s": 0.13089089997811243
+    "wall_s": 0.1671656999969855
   },
   {
     "success": true,
@@ -140,7 +140,7 @@
       "iter_count": 20,
       "model_evals": 20,
       "deriv_evals": 18,
-      "runtime": 0.19697430002270266,
+      "runtime": 0.21990460000233725,
       "exit_status": "SUCCESS",
       "nit": 18,
       "nfev": 19,
@@ -151,7 +151,7 @@
     "architecture": "series",
     "pinned": true,
     "aero": "analytical",
-    "wall_s": 0.2023384000058286
+    "wall_s": 0.22680070000933483
   },
   {
     "success": true,
@@ -217,7 +217,7 @@
       "iter_count": 20,
       "model_evals": 20,
       "deriv_evals": 18,
-      "runtime": 0.1854141000076197,
+      "runtime": 0.2096763999434188,
       "exit_status": "SUCCESS",
       "nit": 18,
       "nfev": 19,
@@ -228,7 +228,7 @@
     "architecture": "parallel",
     "pinned": true,
     "aero": "analytical",
-    "wall_s": 0.18952710001030937
+    "wall_s": 0.21420289995148778
   },
   {
     "success": true,
@@ -294,7 +294,7 @@
       "iter_count": 20,
       "model_evals": 20,
       "deriv_evals": 18,
-      "runtime": 0.19350279995705932,
+      "runtime": 0.22157699998933822,
       "exit_status": "SUCCESS",
       "nit": 18,
       "nfev": 19,
@@ -305,7 +305,7 @@
     "architecture": "series_parallel",
     "pinned": true,
     "aero": "analytical",
-    "wall_s": 0.19805720000294968
+    "wall_s": 0.22890700004063547
   },
   {
     "success": true,
@@ -371,7 +371,7 @@
       "iter_count": 22,
       "model_evals": 22,
       "deriv_evals": 20,
-      "runtime": 0.20438129996182397,
+      "runtime": 0.21546410000883043,
       "exit_status": "SUCCESS",
       "nit": 20,
       "nfev": 21,
@@ -382,7 +382,7 @@
     "architecture": "turbo_electric",
     "pinned": true,
     "aero": "analytical",
-    "wall_s": 0.20976699999300763
+    "wall_s": 0.2216894999728538
   },
   {
     "success": true,
@@ -448,7 +448,7 @@
       "iter_count": 20,
       "model_evals": 20,
       "deriv_evals": 18,
-      "runtime": 0.21078560000751168,
+      "runtime": 0.24067770002875477,
       "exit_status": "SUCCESS",
       "nit": 18,
       "nfev": 19,
@@ -459,7 +459,7 @@
     "architecture": "fuel_cell",
     "pinned": true,
     "aero": "analytical",
-    "wall_s": 0.21490139997331426
+    "wall_s": 0.24537339998641983
   },
   {
     "success": true,
@@ -525,7 +525,7 @@
       "iter_count": 25,
       "model_evals": 25,
       "deriv_evals": 23,
-      "runtime": 0.20838450000155717,
+      "runtime": 0.21891080000204965,
       "exit_status": "SUCCESS",
       "nit": 23,
       "nfev": 24,
@@ -536,7 +536,7 @@
     "architecture": "relaxed",
     "pinned": false,
     "aero": "analytical",
-    "wall_s": 0.2126198000041768
+    "wall_s": 0.22663930000271648
   },
   {
     "success": true,
@@ -602,7 +602,7 @@
       "iter_count": 53,
       "model_evals": 53,
       "deriv_evals": 34,
-      "runtime": 23.255639099981636,
+      "runtime": 23.69426660001045,
       "exit_status": "SUCCESS",
       "nit": 34,
       "nfev": 52,
@@ -613,7 +613,7 @@
     "architecture": "all_electric",
     "pinned": true,
     "aero": "aerosandbox",
-    "wall_s": 23.26154250005493
+    "wall_s": 23.700740700005554
   },
   {
     "success": true,
@@ -679,7 +679,7 @@
       "iter_count": 42,
       "model_evals": 42,
       "deriv_evals": 24,
-      "runtime": 20.16045630001463,
+      "runtime": 21.802926299977116,
       "exit_status": "SUCCESS",
       "nit": 24,
       "nfev": 41,
@@ -690,7 +690,7 @@
     "architecture": "series",
     "pinned": true,
     "aero": "aerosandbox",
-    "wall_s": 20.164852800022345
+    "wall_s": 21.80739239999093
   },
   {
     "success": true,
@@ -756,7 +756,7 @@
       "iter_count": 33,
       "model_evals": 33,
       "deriv_evals": 21,
-      "runtime": 15.5718130999594,
+      "runtime": 17.11722820001887,
       "exit_status": "SUCCESS",
       "nit": 21,
       "nfev": 32,
@@ -767,7 +767,7 @@
     "architecture": "parallel",
     "pinned": true,
     "aero": "aerosandbox",
-    "wall_s": 15.576356099976692
+    "wall_s": 17.121618299977854
   },
   {
     "success": true,
@@ -833,7 +833,7 @@
       "iter_count": 42,
       "model_evals": 42,
       "deriv_evals": 24,
-      "runtime": 22.20522240002174,
+      "runtime": 22.02686669997638,
       "exit_status": "SUCCESS",
       "nit": 24,
       "nfev": 41,
@@ -844,7 +844,7 @@
     "architecture": "series_parallel",
     "pinned": true,
     "aero": "aerosandbox",
-    "wall_s": 22.20949969999492
+    "wall_s": 22.033281500043813
   },
   {
     "success": true,
@@ -910,7 +910,7 @@
       "iter_count": 27,
       "model_evals": 27,
       "deriv_evals": 19,
-      "runtime": 13.605848199978936,
+      "runtime": 13.41256029997021,
       "exit_status": "SUCCESS",
       "nit": 19,
       "nfev": 26,
@@ -921,7 +921,7 @@
     "architecture": "turbo_electric",
     "pinned": true,
     "aero": "aerosandbox",
-    "wall_s": 13.610378899960779
+    "wall_s": 13.417250200000126
   },
   {
     "success": true,
@@ -987,7 +987,7 @@
       "iter_count": 22,
       "model_evals": 22,
       "deriv_evals": 20,
-      "runtime": 13.876580799988005,
+      "runtime": 14.690832699998282,
       "exit_status": "SUCCESS",
       "nit": 20,
       "nfev": 21,
@@ -998,7 +998,7 @@
     "architecture": "fuel_cell",
     "pinned": true,
     "aero": "aerosandbox",
-    "wall_s": 13.880750000011176
+    "wall_s": 14.695963400008623
   },
   {
     "success": true,
@@ -1064,7 +1064,7 @@
       "iter_count": 50,
       "model_evals": 50,
       "deriv_evals": 26,
-      "runtime": 22.627426800027024,
+      "runtime": 24.66613739996683,
       "exit_status": "SUCCESS",
       "nit": 26,
       "nfev": 49,
@@ -1075,6 +1075,6 @@
     "architecture": "relaxed",
     "pinned": false,
     "aero": "aerosandbox",
-    "wall_s": 22.633583899994846
+    "wall_s": 24.6714939000085
   }
 ]
