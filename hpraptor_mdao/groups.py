@@ -91,7 +91,8 @@ class HybridVTOLGroup(om.Group):
         self.add_subsystem("flight_condition", ivc,
                            promotes_outputs=["V_cruise", "altitude"])
 
-        geo_outputs = ["S_ref", "span", "chord_mean", "wetted_wing",
+        geo_outputs = ["S_ref", "span", "chord_mean", "chord_root", "mac",
+                       "e_oswald", "wetted_wing",
                        "fuse_length", "fuse_diameter", "wetted_fuse",
                        "rotor_diameter", "A_rotor", "S_h", "S_v", "tail_arm"]
         if opt["geometry_source"] == "aerosandbox":
@@ -105,13 +106,14 @@ class HybridVTOLGroup(om.Group):
 
         self.add_subsystem(
             "geometry", geo_comp,
-            promotes_inputs=["m_tow", "wing_loading", "AR", "disk_loading"],
+            promotes_inputs=["m_tow", "wing_loading", "AR", "disk_loading",
+                             "taper_ratio"],
             promotes_outputs=geo_outputs,
         )
 
         self.add_subsystem(
             "structures", StructuresComp(f_empty_nonwing=opt["f_empty_nonwing"]),
-            promotes_inputs=["S_ref", "AR", "m_tow", "t_spar_mm"],
+            promotes_inputs=["S_ref", "AR", "m_tow", "t_spar_mm", "taper_ratio"],
             promotes_outputs=["m_wing_structure", "spar_mass", "g4_stress_margin", "m_empty"],
         )
 
@@ -128,7 +130,7 @@ class HybridVTOLGroup(om.Group):
             self.add_subsystem(
                 "aero", ASBAeroComp(solver=opt["asb_solver"]),
                 promotes_inputs=["m_tow", "wing_loading", "AR", "disk_loading",
-                                 "V_cruise", "altitude"],
+                                 "taper_ratio", "V_cruise", "altitude"],
                 promotes_outputs=["C_D0", "C_L_cruise", "C_D_cruise", "L_D",
                                   "D_cruise", "g1_cl_margin", "alpha_trim"],
             )
@@ -137,7 +139,7 @@ class HybridVTOLGroup(om.Group):
                 "aero", AeroComp(),
                 promotes_inputs=["S_ref", "AR", "fuse_length", "fuse_diameter",
                                  "wetted_wing", "wetted_fuse", "chord_mean",
-                                 "m_tow", "V_cruise", "altitude"],
+                                 "e_oswald", "m_tow", "V_cruise", "altitude"],
                 promotes_outputs=["C_D0", "C_L_cruise", "C_D_cruise", "L_D",
                                   "D_cruise", "g1_cl_margin"],
             )

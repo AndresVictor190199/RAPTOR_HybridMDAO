@@ -138,6 +138,12 @@ def test_component_partials_are_correct():
     # returns pure noise and the comparison is meaningless (the analytic
     # zero is verified directly in test_m5_architecture_np.py).
     prob.set_val("z_arch", np.array([0.8, -0.3, 0.2, 0.0, 0.5, -0.6]))
+    # Same reasoning for taper: the mean aerodynamic chord is stationary in
+    # taper_ratio at lambda = 1 (MAC is minimised by a rectangular wing), so
+    # d(mac)/d(taper) is exactly zero there. Complex step returns that zero
+    # exactly while finite difference returns roundoff, and their relative
+    # difference is then 1.0 for a derivative that is simply not there.
+    prob.set_val("taper_ratio", 0.6)
     prob.run_model()
     # step=1e-4 rather than the 1e-6 default: several derivatives here are
     # O(1e-6) or smaller, where a 1e-6 FD step is dominated by roundoff.

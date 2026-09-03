@@ -80,13 +80,14 @@ def aerosandbox_aero_reason() -> str:
     return _AERO_REASON
 
 
-def _assemble(m_tow, wing_loading, AR, disk_loading, n_rotors=4, t_c=0.12):
+def _assemble(m_tow, wing_loading, AR, disk_loading, n_rotors=4, t_c=0.12,
+              taper_ratio=1.0):
     """Build the AeroSandbox airplane for one design point."""
     from hpraptor.m2_geometry.aerosandbox_geometry import build_airplane
 
     W = m_tow * G
     S = W / wing_loading
-    wing = WingPlanform(S=S, AR=AR, t_c=t_c)
+    wing = WingPlanform(S=S, AR=AR, t_c=t_c, taper_ratio=taper_ratio)
     fuselage = estimate_fuselage_geometry(m_tow)
     tail = size_tail_from_wing(wing)
     sized = size_rotors_from_disk_loading(W, disk_loading, n_rotors)
@@ -115,10 +116,14 @@ class ASBGeometryComp(om.ExplicitComponent):
         self.add_input("wing_loading", val=300.0, units="N/m**2")
         self.add_input("AR", val=12.0)
         self.add_input("disk_loading", val=120.0, units="N/m**2")
+        self.add_input("taper_ratio", val=1.0)
 
         self.add_output("S_ref", val=0.3, units="m**2")
         self.add_output("span", val=2.0, units="m")
         self.add_output("chord_mean", val=0.17, units="m")
+        self.add_output("chord_root", val=0.17, units="m")
+        self.add_output("mac", val=0.17, units="m")
+        self.add_output("e_oswald", val=0.78)
         self.add_output("wetted_total", val=1.5, units="m**2",
                         desc="Measured wetted area of every surface, not a "
                              "flat-plate factor on the planform")
@@ -147,6 +152,7 @@ class ASBGeometryComp(om.ExplicitComponent):
             inputs["m_tow"][0], inputs["wing_loading"][0],
             inputs["AR"][0], inputs["disk_loading"][0],
             n_rotors=self.options["n_rotors"], t_c=self.options["t_c"],
+            taper_ratio=inputs["taper_ratio"][0],
         )
 
         wetted_wing = float(airplane.wings[0].area("wetted"))
@@ -156,6 +162,9 @@ class ASBGeometryComp(om.ExplicitComponent):
         outputs["S_ref"] = wing.S
         outputs["span"] = wing.span
         outputs["chord_mean"] = wing.chord_mean
+        outputs["chord_root"] = wing.chord_root
+        outputs["mac"] = wing.mac
+        outputs["e_oswald"] = wing.oswald_factor
         outputs["wetted_wing"] = wetted_wing
         outputs["wetted_fuse"] = wetted_fuse
         outputs["fuse_length"] = fuselage.length_m
@@ -197,6 +206,7 @@ class ASBAeroComp(om.ExplicitComponent):
         self.add_input("wing_loading", val=300.0, units="N/m**2")
         self.add_input("AR", val=12.0)
         self.add_input("disk_loading", val=120.0, units="N/m**2")
+        self.add_input("taper_ratio", val=1.0)
         self.add_input("V_cruise", val=30.0, units="m/s")
         self.add_input("altitude", val=3126.0, units="m")
 
@@ -221,7 +231,8 @@ class ASBAeroComp(om.ExplicitComponent):
 
         airplane, wing, _, _, _ = _assemble(
             m_tow, inputs["wing_loading"][0], inputs["AR"][0],
-            inputs["disk_loading"][0])
+            inputs["disk_loading"][0],
+            taper_ratio=inputs["taper_ratio"][0])
 
         atmos = asb.Atmosphere(altitude=h)
         rho = float(atmos.density())

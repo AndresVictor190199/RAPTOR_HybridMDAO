@@ -22,7 +22,12 @@ class AeroComp(om.ExplicitComponent):
 
     def initialize(self):
         self.options.declare("t_c", default=0.12, types=float)
-        self.options.declare("e_oswald", default=0.78, types=float)
+        # Kept only as an override. e is now an INPUT, computed from AR
+        # and taper by GeometryComp -- a constant e made the drag polar
+        # blind to planform shape, which would have made a taper design
+        # variable a null direction. Set this to a float to pin it.
+        self.options.declare("e_oswald", default=None,
+                             types=float, allow_none=True)
         self.options.declare("C_L_max", default=1.6, types=float)
 
     def setup(self):
@@ -40,6 +45,8 @@ class AeroComp(om.ExplicitComponent):
         self.add_input("wetted_fuse", val=0.75, units="m**2")
         self.add_input("chord_mean", val=0.27, units="m")
         self.add_input("m_tow", val=20.0, units="kg")
+        self.add_input("e_oswald", val=0.78,
+                       desc="Span efficiency from AR and taper (m2 geometry)")
         self.add_input("V_cruise", val=30.0, units="m/s")
         self.add_input("altitude", val=2900.0, units="m")
 
@@ -59,7 +66,8 @@ class AeroComp(om.ExplicitComponent):
         V = inputs["V_cruise"][0]
         alt = inputs["altitude"][0]
         W = inputs["m_tow"][0] * G
-        e = self.options["e_oswald"]
+        e = (self.options["e_oswald"] if self.options["e_oswald"] is not None
+             else inputs["e_oswald"][0])
 
         C_D0 = parasite_cd0_from_wetted(
             S_ref=S,

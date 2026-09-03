@@ -105,6 +105,15 @@ def build_problem(
     #                 filament-wound CFRP tube, so it is allowed to bind.
     model.add_design_var("wing_loading", lower=60.0, upper=600.0, ref=250.0)
     model.add_design_var("AR", lower=5.0, upper=22.0, ref=12.0)
+    #   taper_ratio   c_tip/c_root. Lower bound 0.25 is an admissibility
+    #                 limit, not a tuning knob: below roughly a quarter the
+    #                 tip chord drops the local Reynolds number into the
+    #                 regime where the section data stops being valid, and
+    #                 tip stall becomes the governing failure. Upper bound
+    #                 1.0 excludes inverse taper, which is never optimal for
+    #                 induced drag and only appears in designs driven by
+    #                 constraints this model does not carry.
+    model.add_design_var("taper_ratio", lower=0.25, upper=1.0, ref=0.6)
     model.add_design_var("disk_loading", lower=60.0, upper=900.0, ref=300.0)
     model.add_design_var("t_spar_mm", lower=1.0, upper=8.0, ref=3.0)
     model.add_design_var("k_electric", lower=0.0, upper=1.0)
@@ -279,6 +288,10 @@ def run_optimization(prob: om.Problem, verbose: bool = True) -> Dict:
         "m_wing_structure": float(prob.get_val("m_wing_structure")[0]),
         "S_ref": float(prob.get_val("S_ref")[0]),
         "AR": float(prob.get_val("AR")[0]),
+        "taper_ratio": float(prob.get_val("taper_ratio")[0]),
+        "chord_root": float(prob.get_val("chord_root")[0]),
+        "mac": float(prob.get_val("mac")[0]),
+        "e_oswald": float(prob.get_val("e_oswald")[0]),
         "span": float(prob.get_val("span")[0]),
         "wing_loading": float(prob.get_val("wing_loading")[0]),
         "disk_loading": float(prob.get_val("disk_loading")[0]),

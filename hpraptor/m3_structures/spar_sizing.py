@@ -145,8 +145,16 @@ class WingStructuralSizer:
         thickness (the spec's t_spar design variable, bounds [1, 6] mm).
         """
         t = t_spar_mm / 1000.0  # mm -> m
-        h = self.planform.t_c * self.planform.chord_mean       # spar depth
-        w = self.spar_chord_fraction * self.planform.chord_mean  # spar width
+        # Sized at the ROOT chord, which is where the bending moment this
+        # method checks actually acts. Using the mean chord was equivalent
+        # while every wing was rectangular, but understates a tapered
+        # wing's root spar: taper deepens the root box exactly where the
+        # load peaks, and that structural credit is a real part of why
+        # taper pays. At taper_ratio = 1 chord_root == chord_mean, so
+        # rectangular wings are unaffected.
+        c_root = self.planform.chord_root
+        h = self.planform.t_c * c_root                  # spar depth
+        w = self.spar_chord_fraction * c_root           # spar width
 
         # Thin-walled rectangular box beam: two flanges (width w) at
         # +-h/2 plus two webs (height h), all of wall thickness t.
@@ -168,7 +176,17 @@ class WingStructuralSizer:
         sigma_allow = self.material.yield_stress_pa / self.load_case.safety_factor
         stress_margin = sigma_max / sigma_allow - 1.0  # g4
 
-        cross_section_area = 2 * t * (w + h)
+        # Mass integrates along the span, so it scales with the MEAN chord,
+        # not the root chord that sizes the stress above. A real spar box
+        # tapers with the wing: its section area falls roughly linearly with
+        # local chord, and integrating that over the span gives the mean.
+        # Multiplying the root section by the full span instead makes a
+        # tapered wing carry a root-sized box all the way to the tip -- it
+        # put 54% of extra mass on a lambda = 0.3 wing and completely buried
+        # the 6% L/D that taper actually buys.
+        h_mean = self.planform.t_c * self.planform.chord_mean
+        w_mean = self.spar_chord_fraction * self.planform.chord_mean
+        cross_section_area = 2 * t * (w_mean + h_mean)
         spar_mass = cross_section_area * self.planform.span * self.material.density_kg_m3
 
         return SparSizingResult(

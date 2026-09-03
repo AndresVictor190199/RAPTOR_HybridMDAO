@@ -140,3 +140,84 @@ def test_visualize_airplane_saves_a_figure(hf_result, tmp_path):
     visualize_airplane(hf_result.airplane, save_path=str(out))
     assert out.is_file()
     assert out.stat().st_size > 0
+
+
+# ── Taper ────────────────────────────────────────────────────────────────
+
+def test_taper_reduces_exactly_to_the_rectangular_wing():
+    """
+    At taper_ratio = 1 every chord must collapse to the old single value.
+
+    This is what makes taper safe to add to an existing framework: results
+    produced before it existed remain reproducible by setting lambda = 1,
+    and any drift here would silently invalidate every earlier run.
+    """
+    import numpy as np
+    from hpraptor.m2_geometry.planform import WingPlanform
+
+    w = WingPlanform(S=0.32, AR=18.0, taper_ratio=1.0)
+    assert w.chord_root == pytest.approx(w.chord_mean, rel=1e-15)
+    assert w.chord_tip == pytest.approx(w.chord_mean, rel=1e-15)
+    assert w.mac == pytest.approx(w.chord_mean, rel=1e-15)
+
+
+def test_taper_conserves_wing_area():
+    """
+    Taper redistributes chord; it must not create or destroy area.
+
+    S = b(c_root + c_tip)/2 has to hold for every lambda, or the wing
+    loading the optimizer chose is not the wing loading it gets.
+    """
+    from hpraptor.m2_geometry.planform import WingPlanform
+
+    for lam in (1.0, 0.7, 0.45, 0.25):
+        w = WingPlanform(S=0.32, AR=18.0, taper_ratio=lam)
+        area = w.span * (w.chord_root + w.chord_tip) / 2.0
+        assert area == pytest.approx(0.32, rel=1e-12), f"area lost at lambda={lam}"
+
+
+def test_oswald_factor_has_an_interior_optimum():
+    """
+    Span efficiency must peak between the taper bounds, not at one of them.
+
+    A design variable whose optimum sits on a bound is the model declining
+    to answer; the whole reason taper is worth optimizing is that induced
+    drag has a real interior best near lambda ~ 0.4. If this ever becomes
+    monotonic, taper has stopped being a meaningful variable.
+    """
+    import numpy as np
+    from hpraptor.m2_geometry.planform import WingPlanform
+
+    lams = np.linspace(0.25, 1.0, 76)
+    e = np.array([WingPlanform(S=0.32, AR=18.0, taper_ratio=l).oswald_factor
+                  for l in lams])
+    best = lams[int(np.argmax(e))]
+    assert 0.30 < best < 0.55, f"Oswald peak at lambda={best}, expected ~0.4"
+    assert e.max() > e[-1] * 1.10, "taper buys less than 10% span efficiency"
+
+
+def test_spar_stress_uses_root_chord_but_mass_uses_mean():
+    """
+    Taper must deepen the root spar without inflating its mass.
+
+    Stress is checked where the bending moment acts (the root), but mass
+    integrates along a box that tapers with the wing, so it scales with the
+    mean chord. Sizing both on the root chord charged a lambda = 0.3 wing
+    54% extra spar mass and buried the L/D that taper buys -- the tapered
+    wing was carrying a root-sized box all the way to the tip.
+    """
+    from hpraptor.m2_geometry.planform import WingPlanform
+    from hpraptor.m3_structures.spar_sizing import (
+        WingStructuralSizer, WingLoadCase,
+    )
+
+    load = WingLoadCase(mtow_kg=10.5)
+    rect = WingStructuralSizer(WingPlanform(S=0.32, AR=18.0, taper_ratio=1.0),
+                               load).size_spar(1.5)
+    tapered = WingStructuralSizer(WingPlanform(S=0.32, AR=18.0, taper_ratio=0.4),
+                                  load).size_spar(1.5)
+
+    # Deeper root box -> lower stress.
+    assert tapered.sigma_max_pa < rect.sigma_max_pa, "taper did not relieve the root"
+    # ...but essentially the same amount of material.
+    assert tapered.spar_mass_kg == pytest.approx(rect.spar_mass_kg, rel=1e-12)
