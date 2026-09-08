@@ -1,5 +1,5 @@
 
-  sizing  (64 outputs)
+  sizing  (67 outputs)
       Re_cruise                         5e+05 -        Chord Reynolds number at the cruise condition
       g8_reynolds                           0 -        1 - Re_cruise/Re_min; <= 0 keeps the design inside t
       C_D0                               0.02 -        Zero-lift drag coefficient
@@ -37,7 +37,10 @@
       altitude                           3126 m        
       S_ref                               0.7 m**2     Wing reference area
       span                                2.7 m        
-      chord_mean                         0.27 m        
+      chord_mean                         0.27 m        Mean geometric chord, S/b
+      chord_root                         0.27 m        
+      mac                                0.27 m        Mean aerodynamic chord; equals chord_mean only for a
+      e_oswald                           0.78 -        Span efficiency, from AR and taper
       wetted_wing                         1.5 m**2     
       fuse_length                         1.2 m        
       fuse_diameter                       0.2 m        

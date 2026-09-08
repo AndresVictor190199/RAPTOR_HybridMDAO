@@ -239,7 +239,8 @@ def run_cruise_multistart(
     starting point. Biasing z toward one architecture breaks the symmetry
     and gives the penalty something to act on.
 
-    The CasADi sweep in m8_optimizer solves the same problem the same way
+    The CasADi sweep that used to live in m8_optimizer solved this same
+    problem the same way (removed once this superseded it)
     (`warm_start_arch_idx`); this keeps the two pipelines comparable.
     """
     if architectures is None:
