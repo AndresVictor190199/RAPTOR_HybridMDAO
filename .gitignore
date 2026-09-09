@@ -76,14 +76,7 @@ reports/*_interactive.html
 reports/*.vts
 reports/*.vtp
 
-# ── The manuscript stays private ─────────────────────────────────────────
-# paper/ holds the journal draft, its LaTeX sources, the audit scripts that
-# produce its numbers, and the built PDFs. It is deliberately NOT tracked:
-# the repository is where the framework lives, not the manuscript, and an
-# unpublished draft should not be pushed anywhere. Nothing under paper/ has
-# ever been committed to this repository -- keep it that way.
-#
-# Everything in it is reproducible from the framework: paper/audit/*.py
-# regenerate the JSON results and the figures, and paper/build_papers.py
-# rebuilds both PDFs.
+# -- Local working directory ---------------------------------------------
+# paper/ is a local scratch area. Not tracked, and nothing in it has ever
+# been committed to this repository.
 paper/
