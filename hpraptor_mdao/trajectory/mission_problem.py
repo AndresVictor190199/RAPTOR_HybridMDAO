@@ -4,7 +4,8 @@ Full five-phase mission trajectory in dymos.
     VTOL climb -> forward transition -> cruise -> back transition -> VTOL landing
 
 This replaces the hand-rolled trapezoidal collocation in
-m7_trajectory/ocp.py. Phase linkage, transcription, and the derivatives
+the CasADi OCP in m7_trajectory (since removed). Phase linkage,
+transcription, and the derivatives
 across the whole trajectory are dymos's responsibility; what remains here
 is the mission definition — phase durations, bounds, boundary conditions,
 and the objective.

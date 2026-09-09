@@ -1,100 +1,158 @@
-# HybridPropulsion_Raptor v0.1.0
+# RAPTOR HybridMDAO
 
-**Energy Optimization for Hybrid Propulsion Systems in Transition VTOL UAVs**
+**Terrain-aware multidisciplinary design optimization for hybrid-electric VTOL UAVs.**
 
-Built on the [RAPTOR](https://github.com/VAero-Lab/RAPTOR) path-planning framework, this package implements multi-source energy optimization for hybrid-electric VTOL aircraft across 5 propulsion architectures.
+Given two coordinates and a payload, the framework sizes the lightest hybrid VTOL that can
+actually fly that route over the real terrain — and lets the optimizer *choose the propulsion
+architecture* rather than comparing six hand-built designs.
 
-## Supported Architectures
+Architecture selection is posed as a continuous design variable (a softmax relaxation over six
+powertrains, with a discreteness penalty that forces a buildable one-hot answer) solved in the
+same gradient-based problem as the wing, the structure and the battery.
 
-| Architecture | Power Path | Best For |
-|---|---|---|
-| **Series** | ICE → Generator → Battery → Motor → Prop | Decoupled ICE sizing |
-| **Parallel** | ICE + Motor → shared shaft | Mechanical efficiency |
-| **Series-Parallel** | ICE split: mechanical + electrical | Flexibility |
-| **Turbo-Electric** | Turbine → Generator → Motor → Prop | High power density |
-| **Fuel Cell** | H₂ FC → Battery → Motor → Prop | Zero emissions |
+---
 
-## Installation
+## Install
 
 ```bash
-pip install -e .                # Development (editable)
-pip install -e ".[mdao]"        # With OpenMDAO support
-pip install -e ".[all]"         # All dependencies
+pip install -e ".[all]"
+setx OPENTOPOGRAPHY_API_KEY <your-free-key>     # Windows; export on POSIX
 ```
 
-**Requirements:** Python >= 3.9, numpy, scipy, matplotlib
+The key is optional but strongly recommended. Without it the DEM builder silently falls back
+from NASADEM (~31 m posting) to keyless SRTM (~111 m) **and overwrites your cached DEM**. It
+prints which source it chose on every run.
 
-## Quick Start
+---
 
-```python
-from hpraptor import *
+## Run it
 
-# Create a series hybrid vehicle (50 kg MTOW)
-vehicle = series_hybrid_config(m_tow=50.0)
-
-# Build a flight path
-path = FlightPath(0.0, 0.0, 0.0, 0.01, 0.0, 0.0)
-path.add_segment(VTOLAscend(altitude_gain=100, climb_rate=3.0))
-path.add_segment(Transition())
-path.add_segment(FWClimb(altitude_gain=200, climb_angle_deg=8, airspeed=25))
-path.add_segment(FWCruise(ground_distance=5000, airspeed=30))
-path.add_segment(FWDescend(altitude_loss=250, descent_angle_deg=6, airspeed=28))
-path.add_segment(Transition())
-path.add_segment(VTOLDescend(altitude_loss=80, descent_rate=2.5))
-
-# Analyze hybrid energy
-manager = HybridEnergyManager(vehicle)
-result = manager.analyze_path(path)
-
-print(f"Total fuel consumed: {result.total_fuel_consumed_kg:.2f} kg")
-print(f"Battery SOC final:  {result.SOC_final*100:.1f}%")
-print(f"Flight time:        {result.total_time/60:.1f} min")
-print(f"Mass reduction:     {result.mass_initial_kg - result.mass_final_kg:.2f} kg")
+```bash
+python -m hpraptor_mdao.run all          # everything: campaign, diagrams, figures  (~6 min)
 ```
 
-## Package Structure
+Or the pieces:
 
-```
-HybridPropulsion_Raptor/
-├── hpraptor/                    # Core package
-│   ├── atmosphere.py            # ISA standard atmosphere
-│   ├── config.py                # UAV config + propulsion modes
-│   ├── segments.py              # 6 flight segment types
-│   ├── path.py                  # FlightPath construction
-│   ├── propulsion_system.py     # Motor, ICE, Generator, FC, Turbine, Propeller
-│   ├── battery_model.py         # Multi-chemistry battery model
-│   ├── fuel_model.py            # Fuel consumption & tank model
-│   ├── vehicles.py              # 5 vehicle configurations
-│   ├── hybrid_energy.py         # Multi-source energy manager
-│   ├── terrain.py               # Terrain clearance (optional)
-│   ├── dem.py                   # DEM interface (optional)
-│   └── builder.py               # Path builder
-├── hpraptor_mdao/               # OpenMDAO MDAO (Phase 3)
-├── examples/                    # Demo scripts
-├── scripts/                     # Analysis scripts
-├── data/                        # Vehicle configs, propulsion maps
-└── tests/                       # Unit tests
+```bash
+python -m hpraptor_mdao.run campaign             # every architecture x both fidelity paths
+python -m hpraptor_mdao.run campaign --quick     # analytical only, ~2 s
+python -m hpraptor_mdao.run sizing --save mydesign
+python -m hpraptor_mdao.run sizing --arch turbo_electric
+python -m hpraptor_mdao.run sizing --geometry-source aerosandbox --aero-source aerosandbox
+python -m hpraptor_mdao.run mission              # five-phase dymos trajectory
+python -m hpraptor_mdao.run coupled              # sizing + trajectory in one loop
+python -m hpraptor_mdao.run xdsm                 # model diagrams
+python -m hpraptor_mdao.run sizing --dry-run     # print the formulation, solve nothing
 ```
 
-## Propulsion Component Models
+Visualization:
 
-All models use generic parametric forms from published literature:
+```bash
+python -m hpraptor.postprocessing.trajectory_3d --views all --interactive
+python -m hpraptor.postprocessing.aircraft_3d --result results/campaign_best.json --views all
+python -m hpraptor.postprocessing.serve          # serve reports/ on localhost
+```
 
-- **Electric Motor**: Parabolic efficiency η(P/P_rated) — Finger et al. (2020)
-- **ICE**: Willans line BSFC model with altitude derating — Bowman et al. (2018)
-- **Generator**: Constant-efficiency with off-design correction
-- **Fuel Cell**: PEM polarization curve — Larminie & Dicks (2003)
-- **Gas Turbine**: Polynomial SFC model — Kurzke (2015)
-- **Propeller**: Parametric CT/CP from BEM — McCrink & Gregory (2017)
-- **Battery**: Multi-chemistry with C-rate and temperature effects
+The interactive 3D pages must be opened over `http://localhost`, not by double-clicking the
+file: Chromium browsers give `file://` pages an opaque origin, which blocks what vtk.js needs.
+`hpraptor-serve` exists for exactly that.
 
-## Roadmap
+### A different route
 
-- [x] Phase 1: Foundation (atmosphere, segments, path, config)
-- [x] Phase 2: Hybrid propulsion physics (5 architectures)
-- [ ] Phase 3: OpenMDAO MDAO integration
-- [ ] Phase 4: Visualization & analysis tools
+Change **two coordinate pairs and one cache path** in a copy of `configs/quito_mission.yaml`,
+then:
+
+```bash
+python -m hpraptor.m1_mission.srtm_downloader --mission configs/mine.yaml \
+    --source auto --resolution native --output data/dem/mine.npz
+python -m hpraptor_mdao.run all --mission configs/mine.yaml
+```
+
+The corridor bounding box is derived from the endpoints; `altitude_amsl` is only a fallback,
+since pad elevations are anchored to the DEM itself.
+
+---
+
+## The optimization problem
+
+**Minimize** primary energy — battery energy divided by charging efficiency plus the fuel's full
+chemical content, so every architecture is charged for its own losses at the same boundary —
+plus a discreteness penalty on the architecture weights.
+
+**9 design variables** (14 scalars): wing loading, aspect ratio, taper ratio, spar thickness,
+disk loading, battery mass, fuel mass, electric fraction, and the 6-vector `z_arch`. Cruise
+altitude joins them when terrain is loaded.
+
+**9 constraints**, each added in response to a specific way the optimizer was caught cheating:
+
+| | Enforces | Stopped |
+|---|---|---|
+| g₁ | stall margin | shrinking the wing past reachable lift |
+| g₂ | battery covers its share | shrinking the aircraft to nothing |
+| g₃ | SOC reserve at touchdown | landing with a flat pack |
+| g₄ | spar below yield | unbounded aspect ratio |
+| g₅ | cruise clears the ridge | flying through a mountain |
+| g₆ | pack C-rate | a pack unable to lift the aircraft |
+| g₇ | rotors fit the span | overlapping rotors |
+| g₈ | Reynolds ≥ 2×10⁵ | a wing the airfoil data no longer covers |
+| g₁₀ | fuel carried supplies its share | burning fuel that existed in no tank |
+
+---
+
+## Package layout
+
+```
+hpraptor/                 physics library
+├── core/                 config, mission loader, atmosphere, flight path/segments
+├── m1_mission/           NASADEM via OpenTopography, terrain surrogate, path building
+├── m2_geometry/          wing planform, fuselage, tail, rotors; AeroSandbox assembly
+├── m3_structures/        spar sizing, mass buildup, stability
+├── m4_aero/              parasite drag buildup, AeroSandbox/VLM interface
+├── m5_propulsion/        motors, ICE, fuel cell, battery catalogue, architecture blending
+├── m6_dynamics/          differentiable 3-DoF equations of motion
+└── postprocessing/       2D dashboards, 3D corridor + vehicle renderers, local server
+
+hpraptor_mdao/            the OpenMDAO layer
+├── components/           each discipline as an ExplicitComponent
+├── trajectory/           dymos phases and ODEs
+├── groups.py             the coupled sizing group (NLBGS on the mass loop)
+├── problem.py            design variables, constraints, objective, driver
+├── coupled.py            sizing + trajectory in one problem
+├── campaign.py           every architecture x both fidelity paths, tabulated
+├── xdsm.py               conceptual and introspected model diagrams
+└── run.py                CLI entry point
+```
+
+Two interchangeable fidelity paths run through m2/m4: an analytical buildup (milliseconds) and
+AeroSandbox's real 3D geometry and aerodynamics (tens of seconds). They agree on the
+architecture ranking and disagree on the numbers, which is the useful property — explore with
+the cheap one, publish with the expensive one.
+
+---
+
+## Outputs
+
+| Directory | Contents |
+|---|---|
+| `results/` | campaign JSON, the rendered results table, the winning design |
+| `reports/` | XDSM diagrams, variable inventory, 3D plates and interactive pages |
+| `figures/` | per-architecture dashboards and the comparison sweep |
+| `data/dem/` | cached DEM (gitignored — one API call rebuilds it) |
+
+---
+
+## Status
+
+Working: the sizing MDO converges to KKT on all 14 campaign runs; NASADEM ingestion for any
+global endpoints; the architecture relaxation recovers the discrete winner; 3D corridor and
+vehicle visualization; 299 tests.
+
+Open: the coupled sizing-plus-trajectory problem returns feasible designs but exits on
+iteration limit rather than reaching KKT — it needs a real NLP solver (IPOPT/SNOPT via
+pyoptsparse) and better scaling. With taper in the design vector, the relaxed run on the
+AeroSandbox path finds the right architecture but a local planform optimum; the pinned runs
+are the ones to quote.
 
 ## License
 
-MIT — See LICENSE file.
+MIT — see LICENSE.

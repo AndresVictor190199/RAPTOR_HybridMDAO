@@ -75,17 +75,27 @@ class HighFidelityGeometryResult:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _build_main_wing(wing: WingPlanform, x_position: float) -> asb.Wing:
+    """
+    Trapezoidal main wing, tapered per ``wing.taper_ratio``.
+
+    The leading edge is swept back by whatever quarter-chord sweep is set,
+    plus the extra offset taper itself introduces: holding the quarter
+    chord straight while the chord shrinks moves the tip leading edge aft
+    by a quarter of the chord difference. Ignoring that term would build a
+    wing whose quarter-chord line is not where the sweep angle says it is,
+    and the aerodynamic solver would then be given a different planform
+    from the one the structural model was sized for.
+    """
     airfoil = asb.Airfoil(WING_AIRFOIL)
     half_span = wing.span / 2.0
-    # Constant-chord (rectangular) planform, consistent with the
-    # constant-chord assumption already used by m3_structures/m4_aero.
-    chord = wing.chord_mean
+    c_root, c_tip = wing.chord_root, wing.chord_tip
 
-    x_tip = x_position + half_span * np.tan(np.radians(wing.sweep_deg))
+    x_quarter = half_span * np.tan(np.radians(wing.sweep_deg))
+    x_tip = x_position + x_quarter + 0.25 * (c_root - c_tip)
     z_tip = half_span * np.tan(np.radians(wing.dihedral_deg))
 
-    root = asb.WingXSec(xyz_le=[x_position, 0.0, 0.0], chord=chord, twist=0.0, airfoil=airfoil)
-    tip = asb.WingXSec(xyz_le=[x_tip, half_span, z_tip], chord=chord, twist=wing.twist_deg, airfoil=airfoil)
+    root = asb.WingXSec(xyz_le=[x_position, 0.0, 0.0], chord=c_root, twist=0.0, airfoil=airfoil)
+    tip = asb.WingXSec(xyz_le=[x_tip, half_span, z_tip], chord=c_tip, twist=wing.twist_deg, airfoil=airfoil)
     return asb.Wing(name="Main Wing", xsecs=[root, tip], symmetric=True)
 
 

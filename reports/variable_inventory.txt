@@ -1,5 +1,5 @@
 
-  sizing  (62 outputs)
+  sizing  (67 outputs)
       Re_cruise                         5e+05 -        Chord Reynolds number at the cruise condition
       g8_reynolds                           0 -        1 - Re_cruise/Re_min; <= 0 keeps the design inside t
       C_D0                               0.02 -        Zero-lift drag coefficient
@@ -29,13 +29,18 @@
       g3_soc_margin_analytic                0 -        reserve_soc - SOC_final; <= 0 means the battery stil
       g6_battery_power                      0 -        P_peak_elec/pack power limit - 1; <= 0 means the pac
       P_battery_peak_w                   3000 W        Peak electrical draw the pack must sustain
+      E_fuel_shaft_required_wh              0 W*h      Shaft energy the fuel path must supply: the share of
+      g10_fuel_energy                       0 -        (fuel shaft energy required - usable fuel on board) 
       m_fuel_carried                      0.3 kg       Fuel actually carried, after architecture gating
       E_battery_used_wh                   200 W*h      Electrical energy drawn from the pack over the missi
       V_cruise                             30 m/s      
       altitude                           3126 m        
       S_ref                               0.7 m**2     Wing reference area
       span                                2.7 m        
-      chord_mean                         0.27 m        
+      chord_mean                         0.27 m        Mean geometric chord, S/b
+      chord_root                         0.27 m        
+      mac                                0.27 m        Mean aerodynamic chord; equals chord_mean only for a
+      e_oswald                           0.78 -        Span efficiency, from AR and taper
       wetted_wing                         1.5 m**2     
       fuse_length                         1.2 m        
       fuse_diameter                       0.2 m        

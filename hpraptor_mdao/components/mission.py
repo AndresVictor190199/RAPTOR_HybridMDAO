@@ -93,6 +93,13 @@ class EnergyComp(om.ExplicitComponent):
                              "cell C-rate")
         self.add_output("P_battery_peak_w", val=3000.0, units="W",
                         desc="Peak electrical draw the pack must sustain")
+        self.add_output("E_fuel_shaft_required_wh", val=0.0, units="W*h",
+                        desc="Shaft energy the fuel path must supply: the "
+                             "share of cruise the battery does not serve")
+        self.add_output("g10_fuel_energy", val=0.0,
+                        desc="(fuel shaft energy required - usable fuel "
+                             "on board) / mission energy; <= 0 means the "
+                             "fuel carried can actually supply its share")
         self.add_output("m_fuel_carried", val=0.3, units="kg",
                         desc="Fuel actually carried, after architecture gating")
         self.add_output("E_battery_used_wh", val=200.0, units="W*h",
@@ -190,7 +197,29 @@ class EnergyComp(om.ExplicitComponent):
         outputs["energy_mission_wh"] = energy_mission_wh
         outputs["energy_available_wh"] = energy_available_wh
         outputs["SOC_final"] = SOC_final
-        outputs["g2_energy_margin"] = energy_mission_wh / energy_available_wh - 1.0
+        # ── Energy balance, per pool ─────────────────────────────────────
+        # These used to be one constraint on the TOTAL:
+        #     g2 = energy_mission_wh / energy_available_wh - 1
+        # which let one pool cover the other's demand. Two ways that is
+        # wrong. Fuel could pay for VTOL and climb, which are electric on
+        # every architecture here. And nothing required the fuel actually
+        # carried to cover the share of cruise the battery does not serve --
+        # so the optimizer drove m_fuel to zero, satisfied the total from
+        # the battery, and was charged in the objective only for
+        # E_battery_used_wh. The (1 - k_eff) share of cruise was supplied by
+        # nothing and cost nothing, which is why every fuel-burning
+        # architecture beat all-electric on primary energy while reporting
+        # m_fuel_carried = 0.
+        E_fuel_shaft_required_wh = (1.0 - k_eff) * E_cruise_wh
+
+        outputs["E_fuel_shaft_required_wh"] = E_fuel_shaft_required_wh
+        outputs["g2_energy_margin"] = E_batt_required_wh / usable_batt - 1.0
+
+        # Written as a scaled difference rather than a ratio on purpose: an
+        # architecture with no fuel converter has usable_fuel == 0 and
+        # required == 0, and 0/0 is NaN, which would poison the Jacobian.
+        outputs["g10_fuel_energy"] = (
+            (E_fuel_shaft_required_wh - usable_fuel) / energy_mission_wh)
         outputs["g3_soc_margin"] = opt["reserve_soc"] - SOC_final
 
 

@@ -128,9 +128,21 @@ def _feature_radius(dem) -> float:
     return float(np.hypot(dlat, dlon)) / 260.0
 
 
-def terrain_surface(dem, frame: CorridorFrame):
+def terrain_surface(dem, frame: CorridorFrame, max_points: Optional[int] = None):
     """
-    Build the terrain as a VTK structured grid, carrying true elevation.
+    Build the terrain as PolyData, carrying true elevation.
+
+    Assembled as a StructuredGrid and converted with ``extract_surface()``.
+    PolyData is what the rest of this module already produces (tubes,
+    discs, spheres) and what the HTML exporter handles best, so converting
+    keeps one mesh type throughout.
+
+    Note on the blank interactive page: converting to PolyData alone did
+    NOT fix it -- a 7.8 MB corridor page still opened to vtk.js's empty
+    "drop a file" state while the 1.1 MB aircraft page worked. The
+    discriminator is scene SIZE, not mesh type, which is what ``max_points``
+    is for. The conversion is kept because it is the right thing to do
+    regardless, not because it was the cure.
 
     Elevation is attached as a scalar *before* exaggeration is applied to
     the geometry, so the colour bar and any probe report real metres AMSL
@@ -142,10 +154,23 @@ def terrain_surface(dem, frame: CorridorFrame):
     lon_grid = np.asarray(dem.lon_grid, dtype=float)
     elev = np.asarray(dem.elev_grid, dtype=float)
 
+    # Optional uniform decimation, used only by the interactive export.
+    # A print plate wants every posting; a browser scene wants to stay
+    # small enough to load. Striding rather than smoothing keeps the
+    # surviving samples at their true measured elevations instead of
+    # inventing averaged ones -- a decimated ridge is a lower-resolution
+    # ridge, not a smoothed-down one, which matters when the figure is
+    # about clearance.
+    if max_points is not None and lat_grid.size > max_points:
+        stride = int(np.ceil(np.sqrt(lat_grid.size / float(max_points))))
+        lat_grid = lat_grid[::stride, ::stride]
+        lon_grid = lon_grid[::stride, ::stride]
+        elev = elev[::stride, ::stride]
+
     x, y, z = frame.to_xyz(lat_grid, lon_grid, elev)
     grid = pv.StructuredGrid(x, y, z)
     grid["Elevation [m AMSL]"] = elev.ravel(order="F")
-    return grid
+    return grid.extract_surface(algorithm="dataset_surface")
 
 
 def _segment_polyline(pv, points: np.ndarray):
@@ -463,18 +488,89 @@ def render_corridor_3d(
     plotter.screenshot(str(out), scale=1,
                        transparent_background=transparent_background)
 
-    # The same scene, exported as a self-contained vtk.js page. The static
-    # plate is what a paper prints, but "does it actually clear the ridge?"
-    # is a question about occlusion from angles the plate does not show, and
-    # the honest answer is to let the reader rotate it. Only the 3D actors
-    # survive the export -- vtk.js has no equivalent of VTK's 2D overlay
-    # actors -- so the legend, colour bar and provenance line are not in the
-    # HTML. That is why it is an addition to the plate, not a replacement.
-    if html_path is not None:
-        html_out = Path(html_path)
-        html_out.parent.mkdir(parents=True, exist_ok=True)
-        plotter.export_html(str(html_out))
+    plotter.close()
 
+    # The interactive page is built separately rather than exported from
+    # the plate's own plotter. It is a different product with different
+    # limits: it must stay small enough for a browser to load, and its 2D
+    # overlays would not survive the export anyway. See
+    # export_corridor_html.
+    if html_path is not None:
+        export_corridor_html(dem, path=path, nodes=nodes,
+                             save_path=html_path, exaggeration=exaggeration,
+                             cmap=cmap, show_droplines=show_droplines)
+
+    return str(out)
+
+
+#: Terrain postings kept in the interactive scene. The full 195x631 corridor
+#: is 123,045 points and produced a 7.8 MB page that Edge opened to vtk.js's
+#: empty "drop a file" state; the 1.1 MB aircraft page, at 5,010 points,
+#: loads fine. Size is the discriminator, so the browser scene is capped.
+#: The static plates are unaffected and keep every posting.
+HTML_MAX_TERRAIN_POINTS = 40_000
+
+
+def export_corridor_html(dem, path=None, nodes: Optional[Sequence] = None,
+                         save_path: str = "reports/corridor_3d_interactive.html",
+                         exaggeration: float = 2.5,
+                         cmap: str = "terrain",
+                         show_droplines: bool = True,
+                         max_terrain_points: int = HTML_MAX_TERRAIN_POINTS) -> str:
+    """
+    Write a self-contained, rotatable vtk.js page of the corridor.
+
+    Deliberately leaner than the print plate. The terrain is decimated to
+    ``max_terrain_points``, and the legend, colour bar, provenance line and
+    facility labels are omitted -- vtk.js has no equivalent of VTK's 2D
+    overlay actors, so those never survived the export in the first place;
+    building them only inflated the file.
+
+    Serve it over http rather than opening it from disk if it will not
+    load: Chromium blocks a range of operations under ``file://``, and a
+    one-line ``python -m http.server`` in the reports directory sidesteps
+    that entirely.
+    """
+    pv = _require_pyvista()
+
+    lat0 = float(np.mean(dem.lat_grid))
+    lon0 = float(np.mean(dem.lon_grid))
+    frame = CorridorFrame(lat0=lat0, lon0=lon0, exaggeration=exaggeration)
+
+    plotter = pv.Plotter(off_screen=True, window_size=[1280, 800])
+    plotter.set_background("white")
+
+    surf = terrain_surface(dem, frame, max_points=max_terrain_points)
+    plotter.add_mesh(surf, scalars="Elevation [m AMSL]", cmap=cmap,
+                     smooth_shading=True, show_scalar_bar=False)
+
+    if path is not None:
+        radius = _feature_radius(dem)
+        if show_droplines:
+            stems, _ = clearance_droplines(path, dem, frame,
+                                           radius=radius * 0.30)
+            if stems is not None:
+                plotter.add_mesh(stems, color="#444444")
+        for name, tube in path_tubes(path, frame, radius=radius):
+            plotter.add_mesh(tube, color=SEGMENT_COLORS.get(name, "#333333"),
+                             smooth_shading=True)
+
+    if nodes:
+        r = _feature_radius(dem) * 2.2
+        for nd in nodes:
+            lat, lon = (float(nd[0]), float(nd[1])) if isinstance(
+                nd, (tuple, list)) else (float(nd.lat), float(nd.lon))
+            ground = float(dem.elevation(lat, lon))
+            x, y, z = frame.to_xyz(lat, lon, ground)
+            plotter.add_mesh(
+                pv.Sphere(radius=r, center=(float(x), float(y), float(z))),
+                color="#B00020")
+
+    plotter.view_isometric()
+
+    out = Path(save_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    plotter.export_html(str(out))
     plotter.close()
     return str(out)
 
@@ -516,9 +612,10 @@ def export_scene(dem, path=None, exaggeration: float = 2.5,
     actually clear the ridge?" is best answered by handing them the geometry
     to rotate in ParaView rather than by another rendered angle.
 
-    Terrain goes to ``.vts`` (structured grid) and the path to ``.vtp``
-    (polydata) -- the extensions VTK requires for those two types; a
-    structured grid cannot be written to a generic container.
+    Both go to ``.vtp`` (PolyData). ``terrain_surface`` returns PolyData --
+    see its docstring for why the StructuredGrid it starts from is
+    converted immediately rather than kept -- so a ``.vts`` extension here
+    would now raise.
     """
     lat0 = float(np.mean(dem.lat_grid))
     lon0 = float(np.mean(dem.lon_grid))
@@ -528,7 +625,7 @@ def export_scene(dem, path=None, exaggeration: float = 2.5,
     out.mkdir(parents=True, exist_ok=True)
     written = []
 
-    terrain_path = out / f"{stem}_terrain.vts"
+    terrain_path = out / f"{stem}_terrain.vtp"
     terrain_surface(dem, frame).save(str(terrain_path))
     written.append(str(terrain_path))
 

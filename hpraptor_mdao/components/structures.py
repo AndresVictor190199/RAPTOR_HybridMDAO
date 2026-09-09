@@ -40,6 +40,7 @@ class StructuresComp(om.ExplicitComponent):
         self.add_input("AR", val=10.0)
         self.add_input("m_tow", val=20.0, units="kg")
         self.add_input("t_spar_mm", val=2.0, units="mm", desc="Spar web thickness (design var)")
+        self.add_input("taper_ratio", val=1.0, desc="c_tip / c_root")
 
         self.add_output("m_wing_structure", val=3.0, units="kg",
                         desc="Spar + ribs + skin")
@@ -57,7 +58,8 @@ class StructuresComp(om.ExplicitComponent):
 
     def compute(self, inputs, outputs):
         wing = WingPlanform(S=inputs["S_ref"][0], AR=inputs["AR"][0],
-                            t_c=self.options["t_c"])
+                            t_c=self.options["t_c"],
+                            taper_ratio=inputs["taper_ratio"][0])
         load_case = WingLoadCase(
             mtow_kg=inputs["m_tow"][0],
             load_factor_ultimate=self.options["load_factor_ultimate"],

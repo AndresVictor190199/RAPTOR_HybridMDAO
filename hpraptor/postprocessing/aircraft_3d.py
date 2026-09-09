@@ -86,7 +86,7 @@ SHAPE_KEYS = ("m_tow", "wing_loading", "AR", "disk_loading")
 
 def airplane_from_design(m_tow: float, wing_loading: float, AR: float,
                          disk_loading: float, n_rotors: int = 4,
-                         t_c: float = 0.12):
+                         t_c: float = 0.12, taper_ratio: float = 1.0):
     """
     Assemble the AeroSandbox airplane for one converged design point.
 
@@ -96,7 +96,7 @@ def airplane_from_design(m_tow: float, wing_loading: float, AR: float,
     """
     from hpraptor_mdao.components.aerosandbox import _assemble
     return _assemble(m_tow, wing_loading, AR, disk_loading,
-                     n_rotors=n_rotors, t_c=t_c)
+                     n_rotors=n_rotors, t_c=t_c, taper_ratio=taper_ratio)
 
 
 def airplane_from_result(result: Dict, n_rotors: int = 4, t_c: float = 0.12):
@@ -106,10 +106,13 @@ def airplane_from_result(result: Dict, n_rotors: int = 4, t_c: float = 0.12):
         raise KeyError(
             f"result is missing the design variables that set the shape: "
             f"{missing}. Expected keys: {list(SHAPE_KEYS)}")
+    # taper_ratio defaults to 1.0 so a result file written before taper
+    # existed still renders -- as the rectangular wing it actually was.
     return airplane_from_design(
         float(result["m_tow"]), float(result["wing_loading"]),
         float(result["AR"]), float(result["disk_loading"]),
-        n_rotors=n_rotors, t_c=t_c)
+        n_rotors=n_rotors, t_c=t_c,
+        taper_ratio=float(result.get("taper_ratio", 1.0)))
 
 
 def _quad_mesh(pv, points, faces):
@@ -187,7 +190,10 @@ def design_summary(result: Dict, wing, fuselage, tail, rotor) -> str:
         f"Wing area     {wing.S:.3f} m^2",
         f"Span          {wing.span:.2f} m",
         f"Aspect ratio  {float(result['AR']):.2f}",
-        f"Mean chord    {wing.chord_mean:.3f} m",
+        f"Root chord    {wing.chord_root:.3f} m",
+        f"Tip chord     {wing.chord_tip:.3f} m",
+        f"Taper ratio   {wing.taper_ratio:.3f}",
+        f"MAC           {wing.mac:.3f} m",
         f"Wing loading  {float(result['wing_loading']):.0f} N/m^2",
         f"Disk loading  {float(result['disk_loading']):.0f} N/m^2",
         f"Rotor dia.    {rotor.diameter_m:.3f} m  x{rotor.n_rotors}",

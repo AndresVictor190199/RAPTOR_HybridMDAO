@@ -71,11 +71,53 @@ def test_drag_responds_to_wing_area(converged_mda):
 
 
 def test_energy_balance_is_reported(converged_mda):
+    """
+    The energy balance is enforced per POOL, not on the total.
+
+    g2 used to be energy_mission / energy_available - 1, which let one pool
+    cover the other's demand: fuel could pay for VTOL and climb (electric on
+    every architecture here), and nothing required the fuel carried to cover
+    the share of cruise the battery does not serve. See EnergyComp.
+    """
     p = converged_mda
     required = p.get_val("energy_mission_wh")[0]
     available = p.get_val("energy_available_wh")[0]
     assert required > 0 and available > 0
-    assert p.get_val("g2_energy_margin")[0] == pytest.approx(required / available - 1.0)
+
+    # g2 is now the BATTERY balance alone.
+    batt_used = p.get_val("E_battery_used_wh")[0]
+    batt_avail = p.get_val("E_battery_wh")[0] * (1.0 - 0.15)
+    assert p.get_val("g2_energy_margin")[0] == pytest.approx(
+        batt_used / batt_avail - 1.0, rel=1e-6)
+
+    # The two pools together still account for the whole mission.
+    fuel_shaft = p.get_val("E_fuel_shaft_required_wh")[0]
+    assert batt_used + fuel_shaft == pytest.approx(required, rel=1e-9)
+
+
+def test_fuel_burning_share_must_be_paid_for_in_fuel(converged_mda):
+    """
+    g10 must go positive when the fuel path is used but no fuel is carried.
+
+    This is the constraint whose absence let every fuel-burning architecture
+    beat all-electric on primary energy while reporting m_fuel_carried = 0 --
+    the (1 - k_eff) share of cruise was supplied by nothing and charged for
+    nothing.
+    """
+    p = converged_mda
+    p.set_val("fuel_capable", 1.0)
+    p.set_val("k_electric", 0.5)     # half of cruise from fuel
+    p.set_val("m_fuel", 0.0)         # ...with an empty tank
+    p.run_model()
+
+    assert p.get_val("E_fuel_shaft_required_wh")[0] > 0.0
+    assert p.get_val("g10_fuel_energy")[0] > 0.0, (
+        "an empty tank must violate the fuel energy balance")
+
+    # Carrying enough fuel must satisfy it.
+    p.set_val("m_fuel", 0.5)
+    p.run_model()
+    assert p.get_val("g10_fuel_energy")[0] < 0.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -96,6 +138,12 @@ def test_component_partials_are_correct():
     # returns pure noise and the comparison is meaningless (the analytic
     # zero is verified directly in test_m5_architecture_np.py).
     prob.set_val("z_arch", np.array([0.8, -0.3, 0.2, 0.0, 0.5, -0.6]))
+    # Same reasoning for taper: the mean aerodynamic chord is stationary in
+    # taper_ratio at lambda = 1 (MAC is minimised by a rectangular wing), so
+    # d(mac)/d(taper) is exactly zero there. Complex step returns that zero
+    # exactly while finite difference returns roundoff, and their relative
+    # difference is then 1.0 for a derivative that is simply not there.
+    prob.set_val("taper_ratio", 0.6)
     prob.run_model()
     # step=1e-4 rather than the 1e-6 default: several derivatives here are
     # O(1e-6) or smaller, where a 1e-6 FD step is dominated by roundoff.
@@ -331,7 +379,11 @@ def test_every_architecture_sizes_to_a_flight_valid_design():
     prob = build_problem(mission=mission, terrain=terrain,
                          fixed_architecture="all_electric")
     r = run_optimization(prob, verbose=False)
-    assert r["m_fuel"] < 1e-3, "all-electric must not carry fuel"
+    # m_fuel_carried, not the m_fuel design variable: for an architecture
+    # with no fuel converter the DV is gated to zero by fuel_capable, which
+    # makes it a null direction the optimizer can leave anywhere. The
+    # carried mass is the physical quantity.
+    assert r["m_fuel_carried"] < 1e-3, "all-electric must not carry fuel"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -547,3 +599,69 @@ def test_aerosandbox_aero_degrades_instead_of_crashing():
     if not aerosandbox_aero_available():
         # Fell back; the analytical polar has no trim angle to report.
         assert "alpha_trim" not in p.model._outputs
+
+
+# ── Architecture pinning ─────────────────────────────────────────────────
+
+def test_pinning_an_architecture_actually_sets_it():
+    """
+    A pinned run must be that architecture, not an average of all six.
+
+    Pinning used to only *remove* z_arch from the design vector, leaving it
+    at its default of zeros. softmax(0) is a uniform 1/6 blend, so every
+    "pinned" run sized the same physically meaningless vehicle -- five
+    sixths of a fuel path and one sixth of a battery -- regardless of the
+    name passed. All six baselines in the architecture comparison were the
+    same number.
+    """
+    import numpy as np
+    from hpraptor_mdao import build_problem, ARCH_NAMES
+
+    for i, arch in enumerate(ARCH_NAMES):
+        prob = build_problem(fixed_architecture=arch, payload_kg=5.0,
+                             V_cruise=30.0, altitude=3126.0,
+                             range_m=13580.0, m_tow_guess=20.0)
+        prob.setup()
+        prob.run_model()
+        w = prob.get_val("arch_weights")
+
+        assert np.argmax(w) == i, f"{arch} pinned but weight peaked elsewhere"
+        assert w[i] > 1.0 - 1e-9, f"{arch} weight {w[i]} is a blend, not one-hot"
+        assert w.sum() == pytest.approx(1.0)
+
+        # all_electric is the only architecture with no fuel path, so this
+        # is the cheapest end-to-end check that the pin reached the physics
+        # rather than just the weight vector.
+        expected_fuel = 0.0 if arch == "all_electric" else 1.0
+        assert float(prob.get_val("fuel_capable")[0]) == pytest.approx(
+            expected_fuel, abs=1e-9), f"{arch} fuel path not pinned"
+
+
+def test_pinning_rejects_an_unknown_architecture():
+    """A typo must fail loudly, not silently size the 1/6 blend."""
+    from hpraptor_mdao import build_problem
+    with pytest.raises(ValueError, match="unknown architecture"):
+        build_problem(fixed_architecture="turboprop")
+
+
+def test_pinned_architectures_do_not_all_size_identically():
+    """
+    Six different powertrains must produce six different vehicles.
+
+    This is the symptom that exposed the bug: the campaign table had six
+    identical rows. Comparing MTOW across the set is the cheapest way to
+    assert the architectures are actually distinct.
+    """
+    from hpraptor_mdao import build_problem, ARCH_NAMES
+
+    masses = []
+    for arch in ARCH_NAMES:
+        prob = build_problem(fixed_architecture=arch, payload_kg=5.0,
+                             V_cruise=30.0, altitude=3126.0,
+                             range_m=13580.0, m_tow_guess=20.0)
+        prob.setup()
+        prob.run_model()
+        masses.append(float(prob.get_val("m_tow")[0]))
+
+    assert len(set(round(m, 6) for m in masses)) > 1, (
+        f"all six architectures sized to the same MTOW: {masses}")

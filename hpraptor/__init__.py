@@ -37,10 +37,12 @@ Module map — role in the mission sizing loop
                     architectures (hpraptor.m5_propulsion)
     m6_dynamics   — differentiable 3-DoF equations of motion for
                     trajectory optimization (hpraptor.m6_dynamics)
-    m7_trajectory — CasADi optimal-control trajectory + continuous
-                    architecture relaxation solver (hpraptor.m7_trajectory)
-    m8_optimizer  — sizing/architecture sweeps and benchmarks
-                    (hpraptor.m8_optimizer)
+    Trajectory optimization and the architecture sweeps used to live here
+    as m7_trajectory and m8_optimizer, built on CasADi. Both were removed
+    once the OpenMDAO framework superseded them: the trajectory is now a
+    dymos formulation in hpraptor_mdao.trajectory, and the sweeps are
+    hpraptor_mdao.campaign. m6_dynamics.eom_np is the numpy twin of the
+    CasADi equations of motion that survived the move.
 
     hpraptor.core.initial_sizing.compute_initial_sizing() is where the
     loop above is actually closed today: an internal fixed-point

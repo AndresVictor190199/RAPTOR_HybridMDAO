@@ -36,10 +36,18 @@ class GeometryComp(om.ExplicitComponent):
         self.add_input("wing_loading", val=270.0, units="N/m**2", desc="W/S")
         self.add_input("AR", val=10.0, desc="Wing aspect ratio")
         self.add_input("disk_loading", val=300.0, units="N/m**2", desc="Rotor W/A")
+        self.add_input("taper_ratio", val=1.0, desc="c_tip / c_root")
 
         self.add_output("S_ref", val=0.7, units="m**2", desc="Wing reference area")
         self.add_output("span", val=2.7, units="m")
-        self.add_output("chord_mean", val=0.27, units="m")
+        self.add_output("chord_mean", val=0.27, units="m",
+                        desc="Mean geometric chord, S/b")
+        self.add_output("chord_root", val=0.27, units="m")
+        self.add_output("mac", val=0.27, units="m",
+                        desc="Mean aerodynamic chord; equals chord_mean only "
+                             "for a rectangular wing")
+        self.add_output("e_oswald", val=0.78,
+                        desc="Span efficiency, from AR and taper")
         self.add_output("wetted_wing", val=1.5, units="m**2")
         self.add_output("fuse_length", val=1.2, units="m")
         self.add_output("fuse_diameter", val=0.2, units="m")
@@ -58,7 +66,8 @@ class GeometryComp(om.ExplicitComponent):
         S = W / inputs["wing_loading"][0]
         AR = inputs["AR"][0]
 
-        wing = WingPlanform(S=S, AR=AR, t_c=self.options["t_c"])
+        wing = WingPlanform(S=S, AR=AR, t_c=self.options["t_c"],
+                            taper_ratio=inputs["taper_ratio"][0])
         fuse = estimate_fuselage_geometry(m_tow)
         rotor = size_rotors_from_disk_loading(W, inputs["disk_loading"][0],
                                               self.options["n_rotors"])
@@ -67,6 +76,9 @@ class GeometryComp(om.ExplicitComponent):
         outputs["S_ref"] = S
         outputs["span"] = wing.span
         outputs["chord_mean"] = wing.chord_mean
+        outputs["chord_root"] = wing.chord_root
+        outputs["mac"] = wing.mac
+        outputs["e_oswald"] = wing.oswald_factor
         outputs["wetted_wing"] = wing.wetted_area
         outputs["fuse_length"] = fuse.length_m
         outputs["fuse_diameter"] = fuse.diameter_m

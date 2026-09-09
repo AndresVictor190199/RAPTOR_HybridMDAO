@@ -82,6 +82,25 @@ def test_exaggeration_scales_only_the_vertical(dem):
     assert float(b[2]) == pytest.approx(4.0 * float(a[2]))
 
 
+def test_terrain_surface_is_polydata_not_structuredgrid(dem):
+    """
+    The interactive HTML export requires PolyData; StructuredGrid breaks it.
+
+    Confirmed against PyVista's own known limitations: vtkStructuredGrid
+    does not convert correctly through the HTML/vtk.js export path, while
+    every other mesh in this module (tubes, discs, spheres) is PolyData and
+    exports fine. This corridor's terrain grid is 195x631 = 123,045 points
+    -- large enough that the failure was not subtle, it was a blank page.
+    terrain_surface() converts with extract_surface() specifically so this
+    cannot regress silently: a caller who swaps back to raw StructuredGrid
+    gets a page that opens to nothing, with no error anywhere in the chain.
+    """
+    surf = terrain_surface(dem, CorridorFrame(-0.22, -78.5, 2.5))
+    assert type(surf).__name__ == "PolyData", (
+        f"terrain_surface returned {type(surf).__name__}; the HTML export "
+        "path needs PolyData, not StructuredGrid")
+
+
 def test_surface_scalars_are_true_elevation_not_exaggerated(dem):
     """
     The colour bar must report real metres even when the shape is stretched.
