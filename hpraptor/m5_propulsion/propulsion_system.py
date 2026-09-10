@@ -23,7 +23,7 @@ References
 [4] Larminie, J. & Dicks, A. (2003). Fuel Cell Systems Explained.
     Wiley, 2nd edition.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

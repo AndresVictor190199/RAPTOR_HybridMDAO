@@ -18,7 +18,7 @@ References
 [2] Verstraete, D. (2015). Long-range fuel-cell powered UAVs.
     Int. J. Hydrogen Energy, 40, 7420–7429.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations
