@@ -115,9 +115,19 @@ def test_sizing_loop_closes_geometry_structure_and_drag():
     assert sizing.sizing_log["m_wing_structure"] == pytest.approx(sizing.m_wing_structure)
 
     # A larger vehicle should need a larger wing structural mass.
+    #
+    # Driven by PAYLOAD, not by overrides.mtow_kg. That override is only the
+    # starting guess for the mass-closure loop, which converges to the same
+    # fixed point regardless: tripling it moved the converged MTOW by 1.4%,
+    # in whichever direction the iteration happened to settle. The assertion
+    # passed on that noise until the spar material changed and it fell the
+    # other way. Payload is an actual exogenous input, so it genuinely
+    # scales the vehicle.
     heavier_mission = load_mission(config_path)
-    heavier_mission.overrides.mtow_kg = sizing.m_tow * 3.0
+    heavier_mission.requirements.payload_kg = (
+        mission.requirements.payload_kg * 2.0)
     sizing_heavy = compute_initial_sizing(heavier_mission, architecture="series")
+    assert sizing_heavy.m_tow > sizing.m_tow, "payload increase did not scale the vehicle"
     assert sizing_heavy.m_wing_structure > sizing.m_wing_structure
 
 

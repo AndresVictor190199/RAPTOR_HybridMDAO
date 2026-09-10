@@ -35,7 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from hpraptor.m2_geometry.planform import WingPlanform
-from .materials import SparMaterial, ALUMINUM_6061_T6
+from .materials import SparMaterial, CFRP_UNIDIRECTIONAL
 
 G = 9.80665  # m/s^2
 
@@ -112,7 +112,7 @@ class WingStructuralSizer:
     """
 
     def __init__(self, planform: WingPlanform, load_case: WingLoadCase,
-                 material: SparMaterial = ALUMINUM_6061_T6,
+                 material: SparMaterial = CFRP_UNIDIRECTIONAL,
                  spar_chord_fraction: float = 0.5):
         """
         Parameters
@@ -120,7 +120,15 @@ class WingStructuralSizer:
         planform : WingPlanform
         load_case : WingLoadCase
         material : SparMaterial
-            Spar material. Default aluminum 6061-T6.
+            Spar material. Default unidirectional CFRP.
+
+            Aluminium 6061-T6 was the previous default and is not what
+            this class of aircraft is built from: a 10 kg VTOL carries a
+            filament-wound carbon tube, not an aluminium box. CFRP has
+            3.7x the specific strength (375 vs 102 kN.m/kg), so the
+            aluminium spar was simultaneously heavier than reality and
+            sitting on its manufacturing floor with 26-40% stress margin,
+            which is why the structure never pushed back on aspect ratio.
         spar_chord_fraction : float
             Spar box width as a fraction of the mean chord [-]. Default
             0.5 (a single/dual-spar box spanning roughly the front half
