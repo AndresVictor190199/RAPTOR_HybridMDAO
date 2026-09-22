@@ -122,6 +122,10 @@ class ArchitectureComp(om.ExplicitComponent):
         self.options.declare("base_manager", types=ContinuousArchitectureManager,
                              desc="Supplies the component parameter set")
         self.options.declare("softmax_temp", default=1.5, types=float)
+        self.options.declare("eta_fallback", default=0.30, types=float,
+                             desc="Stand-in fuel-path efficiency for all_electric, "
+                                  "which has no fuel converter. Gated out of the "
+                                  "energy balance by fuel_capable.")
         self.options.declare("sp_motor", default=5000.0, types=float, desc="W/kg")
         self.options.declare("sp_ice", default=1500.0, types=float)
         self.options.declare("sp_gen", default=3000.0, types=float)
@@ -143,6 +147,11 @@ class ArchitectureComp(om.ExplicitComponent):
         self.add_output("fuel_flow", val=1e-4, units="kg/s")
         self.add_output("P_elec_bus", val=300.0, units="W")
         self.add_output("fuel_lhv", val=43.0e6, units="J/kg")
+        self.add_output("eta_fuel_cruise", val=0.30,
+                        desc="Blended fuel-path efficiency at the cruise "
+                             "operating point: shaft energy delivered per unit "
+                             "of fuel chemical energy. Consumed by EnergyComp "
+                             "to size the tank.")
         self.add_output("fuel_capable", val=1.0,
                         desc="Blended ability to convert fuel to shaft power; "
                              "0 for a pure-battery architecture, 1 for any "
@@ -179,5 +188,16 @@ class ArchitectureComp(om.ExplicitComponent):
         outputs["fuel_flow"] = split["fuel_flow_kg_s"]
         outputs["P_elec_bus"] = split["P_elec_from_bus"]
         outputs["fuel_lhv"] = self._npm.blend_fuel_lhv(w)
+        # The architecture's OWN conversion efficiency, from the same split
+        # physics blended just above, evaluated at the cruise operating
+        # point. EnergyComp used to size the tank on a flat 0.30 for every
+        # architecture -- the series_parallel value -- which made the
+        # fuel-burning architectures differ only in powerplant mass and left
+        # this module's Willans line, turbine lapse and polarization curve
+        # computed but unused outside the trajectory ODEs.
+        outputs["eta_fuel_cruise"] = self._npm.blend_fuel_efficiency(
+            w, inputs["P_cruise"][0], inputs["altitude"][0],
+            eta_fallback=opt["eta_fallback"],
+        )
         outputs["fuel_capable"] = np.sum(w * self._HAS_FUEL_PATH)
         outputs["penalty_discreteness"] = discreteness_penalty(w)

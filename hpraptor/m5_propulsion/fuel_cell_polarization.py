@@ -34,7 +34,7 @@ Two equivalent routes are provided here, both using the same residual:
     the idiomatic OpenMDAO formulation, and it doubles as the reference
     the unrolled version is verified against.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

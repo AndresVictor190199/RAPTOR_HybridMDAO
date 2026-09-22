@@ -155,14 +155,15 @@ class HybridVTOLGroup(om.Group):
             promotes_inputs=["z_arch", "P_cruise", "P_motor_total", "k_electric", "altitude"],
             promotes_outputs=["arch_weights", "m_propulsion", "fuel_flow",
                               "P_elec_bus", "fuel_lhv", "fuel_capable",
-                              "penalty_discreteness"],
+                              "eta_fuel_cruise", "penalty_discreteness"],
         )
 
         self.add_subsystem(
             "energy",
             EnergyComp(range_m=range_m, h_origin_m=h_origin, t_vtol_total=t_vtol),
             promotes_inputs=["P_hover", "P_cruise", "P_climb", "L_D", "m_tow",
-                             "fuel_lhv", "fuel_capable", "V_cruise", "altitude",
+                             "fuel_lhv", "fuel_capable", "eta_fuel_cruise",
+                             "V_cruise", "altitude",
                              "k_electric", "m_battery", "m_fuel"],
             promotes_outputs=["E_battery_wh", "E_fuel_wh", "m_fuel_carried",
                               "E_vtol_wh", "E_climb_wh", "E_cruise_wh", "t_climb_s",

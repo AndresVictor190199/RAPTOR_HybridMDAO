@@ -18,7 +18,7 @@ References
     status of technology. NASA/CR–2022-0012570.
 [3] Gundlach, J. (2012). Designing Unmanned Aircraft Systems. AIAA.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

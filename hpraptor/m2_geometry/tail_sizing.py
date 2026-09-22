@@ -19,7 +19,7 @@ References
 [1] Raymer, D. (2018). Aircraft Design: A Conceptual Approach. Ch.6.
 [2] Roskam, J. Airplane Design, Part II.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

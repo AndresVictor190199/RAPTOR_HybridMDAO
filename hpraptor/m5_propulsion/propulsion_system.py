@@ -292,10 +292,22 @@ class GasTurbineParams:
     """
     Small gas turbine (turboshaft) for turbo-electric configuration.
 
-    SFC model (polynomial fit):
-        SFC = SFC_design · (c0 + c1·x + c2·x²)  where x = P/P_max
+    SFC model (part-load lapse):
+        SFC = SFC_design · (c0 + c1·x + c2·x²) / x   where x = P/P_max
 
-    Altitude correction via inlet density and temperature.
+    The coefficients sum to 1, so the bracket is a normalised correction
+    that equals 1 at the design point (x = 1) and SFC = SFC_design there.
+    The division by x is what makes this a PART-LOAD LAPSE: specific fuel
+    consumption rises hyperbolically as load falls, because a turbine's
+    idle fuel flow is nearly load-independent while its useful output is
+    not. Without the 1/x the bracket alone is monotonically INCREASING in
+    x, i.e. the turbine would be most efficient at idle -- it returned
+    104 g/kWh at 5% load, an 80% shaft thermal efficiency no turbomachine
+    of this class approaches. This mirrors the ICE's Willans line, which
+    gets the same physics right through its idle-flow term.
+
+    x is clamped to >= 0.05 by the callers, which caps the lapse at 6.5x
+    design SFC rather than letting it diverge at zero output.
 
     References: Kurzke (2015), Walsh & Fletcher (2004)
     """
@@ -305,7 +317,9 @@ class GasTurbineParams:
     RPM_design: float = 80000.0   # Design RPM
     fuel_lhv: float = 43.0e6     # LHV of Jet-A [J/kg]
     # Polynomial SFC correction coefficients
-    sfc_c0: float = 0.30          # Zero-load term
+    # Normalised part-load correction; c0 + c1 + c2 == 1 so that the
+    # bracket is 1.0 at the design point. See the SFC model note above.
+    sfc_c0: float = 0.30          # Constant (idle-dominated) term
     sfc_c1: float = 0.50          # Linear term
     sfc_c2: float = 0.20          # Quadratic term
     altitude_derating_exp: float = 1.0
@@ -329,7 +343,7 @@ class GasTurbineParams:
         """SFC [g/kWh] at given shaft power."""
         P_max = self.max_power_at_altitude(altitude_m)
         x = np.clip(P_shaft / P_max, 0.05, 1.0) if P_max > 0 else 0.5
-        sfc = self.SFC_design * (self.sfc_c0 + self.sfc_c1 * x + self.sfc_c2 * x ** 2)
+        sfc = self.SFC_design * (self.sfc_c0 + self.sfc_c1 * x + self.sfc_c2 * x ** 2) / x
         return sfc
 
     def fuel_flow_rate(self, P_shaft: float, altitude_m: float = 0.0) -> float:

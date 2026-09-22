@@ -27,7 +27,7 @@ References
 [3] uav_mdo_framework_spec.md — g4 (wing stress) constraint and the
     t_spar / N_ribs design variables (Sec. 3.2-3.3).
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

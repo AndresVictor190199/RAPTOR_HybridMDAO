@@ -14,7 +14,7 @@ References
     (typical areal densities for small-UAV composite/built-up structure)
 [2] uav_mdo_framework_spec.md — N_ribs design variable (Sec. 3.2).
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

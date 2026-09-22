@@ -18,7 +18,7 @@ has no fuselage or tail geometry despite its docstring mentioning
 tailplanes. Wiring a real x_cg(t)/x_np predictor is a m2_geometry gap,
 not something this module can synthesize on its own.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

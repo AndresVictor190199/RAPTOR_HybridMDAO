@@ -285,6 +285,12 @@ def run_optimization(prob: om.Problem, verbose: bool = True) -> Dict:
         "m_rotor_group": float(prob.get_val("m_rotor_group")[0]),
         "m_fuel": float(prob.get_val("m_fuel")[0]),
         "m_propulsion": float(prob.get_val("m_propulsion")[0]),
+        # The fuel-path efficiency the chosen architecture was actually
+        # sized on. Recorded for the same reason g3 is: it now determines
+        # how much shaft energy a kilogram of fuel is worth, and without it
+        # in the result there is no way to audit why one architecture beat
+        # another.
+        "eta_fuel_cruise": float(prob.get_val("eta_fuel_cruise")[0]),
         "m_wing_structure": float(prob.get_val("m_wing_structure")[0]),
         "S_ref": float(prob.get_val("S_ref")[0]),
         "AR": float(prob.get_val("AR")[0]),

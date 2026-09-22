@@ -19,7 +19,7 @@ References
 [2] Finger et al. (2020). Hybrid-electric propulsion sizing. AIAA J.
 [3] de Vries et al. (2019). Preliminary sizing for HEP aircraft.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

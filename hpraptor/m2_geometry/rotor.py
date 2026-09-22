@@ -10,7 +10,7 @@ m2_geometry output with actual per-rotor diameter, so m5_propulsion's
 hover power model has a single, reusable, labeled source instead of
 recomputing disk area ad hoc.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

@@ -49,7 +49,7 @@ Module map — role in the mission sizing loop
     iteration resolves geometry (m2), structural mass (m3), and
     parasite drag (m4) against mass/power (m5) until MTOW converges.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from .core.atmosphere import isa_density, isa_temperature, isa_pressure, isa_speed_of_sound

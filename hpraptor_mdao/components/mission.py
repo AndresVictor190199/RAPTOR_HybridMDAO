@@ -27,7 +27,16 @@ class EnergyComp(om.ExplicitComponent):
         self.options.declare("pack_overhead", default=batcat.DEFAULT_PACK_OVERHEAD,
                              types=float)
         self.options.declare("eta_motor", default=0.93, types=float)
-        self.options.declare("eta_overall_cruise", default=0.30, types=float)
+        # DEFAULT ONLY. The live value arrives on the `eta_fuel_cruise`
+        # input, blended per architecture by ArchitectureComp. This option
+        # is the value that input falls back to when EnergyComp is run
+        # standalone (as several unit tests do). It used to be the ONLY
+        # value: a flat 0.30 -- the series_parallel figure from
+        # core.initial_sizing -- applied to every architecture, which made
+        # the fuel-burning architectures differ in powerplant mass alone.
+        self.options.declare("eta_overall_cruise", default=0.30, types=float,
+                             desc="Fallback fuel-path efficiency when "
+                                  "eta_fuel_cruise is left unconnected")
         self.options.declare("reserve_soc", default=0.15, types=float)
         self.options.declare("fuel_reserve", default=0.10, types=float)
         self.options.declare("t_vtol_total", default=95.0, types=float, desc="s")
@@ -57,6 +66,10 @@ class EnergyComp(om.ExplicitComponent):
                        desc="Commanded share of cruise power drawn from the battery")
         self.add_input("fuel_capable", val=1.0,
                        desc="Blended ability to burn fuel; 0 for all-electric")
+        self.add_input("eta_fuel_cruise", val=self.options["eta_overall_cruise"],
+                       desc="Fuel-path efficiency (shaft energy out per unit of "
+                            "fuel chemical energy) for the blended architecture, "
+                            "at the cruise operating point")
         # Storage masses are DESIGN VARIABLES, not sizing formulas. Deriving
         # them from the requirement made g3 satisfied by construction; as
         # variables the optimizer must earn the reserve, and g3/g6 become
@@ -164,7 +177,8 @@ class EnergyComp(om.ExplicitComponent):
         # ── Fuel: only the share the architecture can actually burn.
         #    Carried fuel is gated so a battery-only aircraft has no dead
         #    fuel mass even if the optimizer leaves m_fuel non-zero.
-        eta = opt["eta_overall_cruise"]
+        # Per-architecture, from ArchitectureComp's own split physics.
+        eta = inputs["eta_fuel_cruise"][0]
         m_fuel = fuel_capable * m_fuel_dv
 
         # ── Usable shaft energy actually on board ────────────────────────

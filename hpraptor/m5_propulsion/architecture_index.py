@@ -267,7 +267,11 @@ class ContinuousArchitectureManager:
             P_max_gt = gt.P_max_sl * (rho / 1.225) * _smooth_min_ca((288.15 / T_loc) ** 0.5, 1.1)
             x_ratio = _smooth_min_ca(_smooth_max_ca(P_gen_shaft / (P_max_gt + 1e-10), 0.05), 1.0)
             
-            sfc = gt.SFC_design * (gt.sfc_c0 + gt.sfc_c1 * x_ratio + gt.sfc_c2 * x_ratio**2)
+            # Part-load lapse: /x_ratio, matching GasTurbineParams and the
+            # numpy twin. See the SFC note on GasTurbineParams.
+            sfc = gt.SFC_design * (
+                gt.sfc_c0 + gt.sfc_c1 * x_ratio + gt.sfc_c2 * x_ratio**2
+            ) / x_ratio
             fuel_flow = sfc * (P_gen_shaft / 1e3) / (1e3 * 3600)
             # Sharper smooth transition at P_fuel_mech ≈ 0 to suppress idle fuel consumption
             smooth_switch = ca.tanh(P_fuel_mech / 10.0)

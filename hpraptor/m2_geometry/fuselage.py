@@ -14,7 +14,7 @@ References
 [1] Raymer, D. (2018). Aircraft Design: A Conceptual Approach. Ch.7
     (statistical fuselage sizing trends).
 
-Author: Victor Berrazueta (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

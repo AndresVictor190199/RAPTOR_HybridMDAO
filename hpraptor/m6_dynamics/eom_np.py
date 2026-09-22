@@ -32,7 +32,7 @@ Phases are separate functions rather than one branching routine: dymos
 instantiates the ODE per phase, so the branch is resolved once at setup
 instead of at every node, and each phase's algebra stays readable.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

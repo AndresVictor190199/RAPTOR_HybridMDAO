@@ -43,7 +43,7 @@ Usage
     # Pinned-architecture baseline, for the discrete comparison:
     prob = build_problem(fixed_architecture="series")
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

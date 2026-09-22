@@ -29,7 +29,7 @@ comparison must be taken on the REAL part only. Comparing complex
 numbers directly either raises or silently branches on the perturbation,
 destroying the derivative. Every branch below uses `_re()`.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations
@@ -133,6 +133,12 @@ class NumpyArchitectureManager:
     """
 
     ARCH_NAMES = ContinuousArchitectureManager.ARCH_NAMES
+
+    #: Lower heating value of the fuel each architecture carries [J/kg],
+    #: in ARCH_NAMES order. Index 5 (fuel cell) is hydrogen; the rest are
+    #: hydrocarbon. all_electric carries no fuel, but its entry must stay
+    #: finite so it cannot put a 0/0 into a blended denominator.
+    FUEL_LHV = np.array([43.0e6, 43.0e6, 43.0e6, 43.0e6, 43.0e6, 120.0e6])
 
     def __init__(self, base_manager: ContinuousArchitectureManager):
         self.base = base_manager
@@ -257,7 +263,12 @@ class NumpyArchitectureManager:
             P_max_gt = gt.P_max_sl * (rho / 1.225) * smooth_min((288.15 / T_loc) ** 0.5, 1.1)
 
             x_ratio = smooth_min(smooth_max(P_gen_shaft / (P_max_gt + 1e-10), 0.05), 1.0)
-            sfc = gt.SFC_design * (gt.sfc_c0 + gt.sfc_c1 * x_ratio + gt.sfc_c2 * x_ratio ** 2)
+            # Part-load lapse: /x_ratio. See GasTurbineParams' SFC note --
+            # without it the bracket rises with load and the turbine is most
+            # efficient at idle, which is backwards.
+            sfc = gt.SFC_design * (
+                gt.sfc_c0 + gt.sfc_c1 * x_ratio + gt.sfc_c2 * x_ratio ** 2
+            ) / x_ratio
             fuel_flow = switch * (sfc * (P_gen_shaft / 1e3) / (1e3 * 3600))
 
             P_gen_elec = P_fuel_mech
@@ -309,6 +320,67 @@ class NumpyArchitectureManager:
             "heat_total": heat,
         }
 
+    def arch_fuel_efficiency(self, arch: str, P_shaft_ref: Any, altitude_m: Any,
+                             eta_fallback: float = 0.30) -> Any:
+        """
+        Shaft energy delivered per unit of fuel CHEMICAL energy, for ONE
+        architecture, at the reference shaft power `P_shaft_ref` [W].
+
+        This is the quantity the sizing model needs to turn a tank of fuel
+        into usable shaft Wh, and it is evaluated the only way that makes
+        it a property of the ARCHITECTURE rather than of the current
+        power-split command: with ``k_electric = 0``, so the fuel path is
+        asked to carry the whole reference demand.
+
+        It is deliberately the same physics `arch_power_split` already
+        runs -- the Willans line, the turbine's part-load lapse, the fuel
+        cell's polarization curve -- rather than a second correlation that
+        could drift from it.
+
+        Caveat, unchanged from the rest of the model: on the architectures
+        with a generator the motor loss on the fuel-supplied shaft power is
+        topped up from the bus, so a little of that shaft energy is
+        battery-borne. That top-up is not charged against the fuel here.
+
+        `all_electric` has no fuel converter, so its efficiency is
+        undefined; `eta_fallback` stands in for it. Nothing rides on the
+        value -- EnergyComp gates fuel mass to zero through `fuel_capable`
+        for that architecture -- but it must be finite and it must not be
+        zero, or the relaxation would be charged twice for the same gate.
+        """
+        if arch == "all_electric":
+            # 0.0 * P keeps the dtype complex under complex step.
+            return eta_fallback + 0.0 * P_shaft_ref
+
+        split = self.arch_power_split(arch, P_shaft_ref, 0.0, altitude_m)
+        P_fuel_chem = split["fuel_flow_kg_s"] * self.FUEL_LHV[self.ARCH_NAMES.index(arch)]
+        return P_shaft_ref / (P_fuel_chem + 1e-12)
+
+    def blend_fuel_efficiency(self, weights: np.ndarray, P_shaft_ref: Any,
+                              altitude_m: Any, eta_fallback: float = 0.30) -> Any:
+        """
+        Blended fuel-path efficiency [-], consistent with `blend_fuel_lhv`.
+
+        Weighted by w_i*LHV_i rather than by w_i alone. The consumer
+        computes usable shaft energy as
+
+            m_fuel * blend_fuel_lhv(w) * blend_fuel_efficiency(w)
+
+        and this weighting is exactly what makes that product equal
+        ``m_fuel * sum_i w_i * LHV_i * eta_i`` -- the physically right
+        blend -- at EVERY weight vector, not just at the one-hot vertices
+        the discreteness penalty eventually drives to. A plain w-weighted
+        mean of eta_i would be correct only once the relaxation had
+        converged, and wrong everywhere the optimizer actually searches.
+
+        The denominator cannot vanish: every FUEL_LHV entry is positive
+        and the softmax weights sum to 1.
+        """
+        etas = [self.arch_fuel_efficiency(a, P_shaft_ref, altitude_m, eta_fallback)
+                for a in self.ARCH_NAMES]
+        wl = weights * self.FUEL_LHV
+        return sum(x * e for x, e in zip(wl, etas)) / np.sum(wl)
+
     def blend_propulsion_mass(self, weights: np.ndarray) -> Any:
         """Blended propulsion dry mass [kg]."""
         masses = np.array([self.prop_systems[a].total_mass for a in self.ARCH_NAMES])
@@ -323,4 +395,4 @@ class NumpyArchitectureManager:
         Blending the LHV keeps the energy objective consistent with the
         blended fuel flow.
         """
-        return 43.0e6 * (1.0 - weights[5]) + 120.0e6 * weights[5]
+        return np.sum(weights * self.FUEL_LHV)

@@ -6,7 +6,7 @@ Minimal material property set needed for preliminary wing spar sizing:
 density (mass), yield stress (strength), and elastic modulus (stiffness,
 reserved for future deflection/aeroelastic checks).
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

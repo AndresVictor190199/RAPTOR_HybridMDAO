@@ -25,7 +25,7 @@ here are documented, overridable, preliminary-design assumptions, not a
 real packaging result. Treat the resulting static margin as indicative,
 not authoritative, until real component layout exists.
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ References
     (component buildup drag method).
 [2] Hoerner, S.F. (1965). Fluid-Dynamic Drag. (typical form factors)
 
-Author: Victor (LUAS-EPN / KU Leuven)
+Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations
