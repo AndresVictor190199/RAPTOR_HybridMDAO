@@ -160,6 +160,19 @@ chain:
 Only (3) is an optimized trajectory in the usual sense. The lateral track is never optimized
 anywhere — it is a straight line in latitude/longitude from origin to destination.
 
+**The two optimizers disagree about the architecture.** `run mission` converges (SLSQP exit
+mode 0, 539 iterations, ~1.5 h wall) to a one-hot **`series_parallel`**, while the sizing MDO
+converges to `all_electric`. The disagreement is not physical: the trajectory burns 0.46 g of
+fuel over the whole mission, so every architecture behaves almost identically in it and the
+choice is decided by the discreteness penalty pushing off a symmetric start rather than by
+energy. The framework's own dry-run note says this outright — the penalty has exactly zero
+gradient at `z_arch = 0`, so which vertex a relaxed run falls into is floating-point
+asymmetry and `--multistart` is required to break the tie. **Do not read the trajectory's
+architecture as a second opinion on the sizing result.**
+
+Converged trajectory, for reference: 13584 m in 402 s, SOC 0.617 at touchdown, phase
+durations 20.8 / 31.0 / 317.5 / 7.9 / 25.0 s.
+
 Measured clearance, at each path's own coordinates rather than by resampling the straight-line
 profile:
 
@@ -180,6 +193,12 @@ follow terrain — is the worst of them.
 Figures: `reports/mission_profiles_2d.png` (altitude and AGL against ground distance) and
 `reports/mission_profiles_3d.png` (the same tracks over the DEM). Regenerate with
 `python -m hpraptor_mdao.run profiles`.
+
+The figures currently show the three m1 candidates and the sizing MDO's cruise altitude. The
+dymos trace is **not** among them: `plot_profiles_2d` accepts a `dymos` key but
+`collect_profiles` does not populate one, because a converged trajectory costs ~1.5 h and is
+not something to run inside a plotting command. Wiring `run mission`'s solution into that key
+is the obvious next step.
 
 ---
 
