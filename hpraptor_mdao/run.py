@@ -98,6 +98,13 @@ def study_sizing(args) -> Dict:
                          geometry_source=args.geometry_source,
                          aero_source=args.aero_source,
                          asb_solver=args.asb_solver)
+    # Recording binds during setup, so it has to be attached before
+    # build_problem's own setup() call is repeated below.
+    hist_db = None
+    if getattr(args, "history", False):
+        from hpraptor_mdao.iteration_history import attach_recorder
+        hist_db = attach_recorder(
+            prob, os.path.join(RESULTS, f"history_{args.arch or 'relaxed'}.sql"))
     prob.final_setup()
 
     if args.formulation:
@@ -126,6 +133,27 @@ def study_sizing(args) -> Dict:
         return {}
 
     result = run_optimization(prob, verbose=True)
+
+    if hist_db:
+        from hpraptor_mdao.iteration_history import (
+            read_history, format_history, plot_history)
+        hist = read_history(hist_db)
+        print()
+        print("=" * 78)
+        print("ITERATION HISTORY")
+        print("=" * 78)
+        print(format_history(hist))
+        png = plot_history(
+            hist, os.path.join(REPORTS, f"iterations_{args.arch or 'relaxed'}.png"),
+            title=f"Sizing MDO convergence - {args.arch or 'relaxed architecture'}")
+        print()
+        print(f"  trace  -> {hist_db}")
+        print(f"  figure -> {png}")
+        result["iteration_history"] = {
+            "n_iter": hist.n_iter,
+            "objective": hist.objective.tolist(),
+            "max_violation": hist.violation.tolist(),
+        }
     if args.arch is None and result.get("success"):
         best = max(result["arch_weights"], key=result["arch_weights"].get)
         print(f"\nRelaxation selected: {best} "
@@ -417,7 +445,60 @@ def study_all(args) -> Dict:
     return out
 
 
+def study_profiles(args) -> Dict:
+    """
+    Draw every vertical profile the framework produces, on one axis.
+
+    Exists because the framework builds a flight profile in three places
+    that do not talk to each other - the m1 strategy set, the sizing MDO's
+    single cruise altitude, and the dymos trajectory - and the only quick
+    way to see that is to plot them together.
+    """
+    import json
+    from hpraptor.m1_mission.dem import DEMInterface
+    from hpraptor.postprocessing.mission_profiles import (
+        collect_profiles, plot_profiles_2d, plot_profiles_3d)
+    from run_mission import _resolve_dem_path
+
+    mission, terrain = _mission_and_terrain(args)
+    if mission is None:
+        raise SystemExit("profiles needs a mission; drop --no-terrain")
+
+    dem = DEMInterface(_resolve_dem_path(mission))
+    data = collect_profiles(mission, terrain, dem)
+
+    print()
+    print("=" * 78)
+    print("MISSION PROFILES - clearance measured at each path's own coordinates")
+    print("=" * 78)
+    print(f"{'profile':<18}{'time min':>10}{'peak m':>10}"
+          f"{'min AGL':>10}{'< floor':>9}{'< ground':>10}")
+    for k, v in data["strategies"].items():
+        if "failed" in v:
+            print(f"{k:<18}  {v['failed']}")
+            continue
+        print(f"{k:<18}{v['total_time']/60:>10.1f}{v['max_alt']:>10.0f}"
+              f"{v['min_agl']:>10.1f}{v['n_below_floor']:>9}{v['n_below_ground']:>10}")
+    if "mdo" in data:
+        m = data["mdo"]
+        print(f"{'sizing MDO cruise':<18}{'':>10}{m['cruise_altitude_m']:>10.0f}"
+              f"{m['cruise_altitude_m'] - data['context']['h_terrain_max_m']:>10.1f}"
+              f"{0:>9}{0:>10}")
+
+    p2 = plot_profiles_2d(data, os.path.join(REPORTS, "mission_profiles_2d.png"))
+    p3 = plot_profiles_3d(data, dem, os.path.join(REPORTS, "mission_profiles_3d.png"))
+    raw = os.path.join(RESULTS, "mission_profiles.json")
+    with open(raw, "w") as fh:
+        json.dump(data, fh, indent=1, default=float)
+    print()
+    print(f"  2D     -> {p2}")
+    print(f"  3D     -> {p3}")
+    print(f"  data   -> {raw}")
+    return data
+
+
 STUDIES = {"sizing": study_sizing, "cruise": study_cruise,
+           "profiles": study_profiles,
            "mission": study_mission, "coupled": study_coupled,
            "xdsm": study_xdsm, "campaign": study_campaign,
            "all": study_all}
@@ -466,6 +547,9 @@ def main():
     parser.add_argument("--quick", action="store_true",
                         help="campaign/all: analytical solvers only, for a "
                              "fast pass over the architecture set")
+    parser.add_argument("--history", action="store_true",
+                        help="record the driver's iterates, print the trace "
+                             "and write reports/iterations_<arch>.png")
     parser.add_argument("--save", default=None, metavar="NAME",
                         help="write the result to results/NAME.json")
     args = parser.parse_args()

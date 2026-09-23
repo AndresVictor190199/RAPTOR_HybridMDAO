@@ -80,3 +80,10 @@ reports/*.vtp
 # paper/ is a local scratch area. Not tracked, and nothing in it has ever
 # been committed to this repository.
 paper/
+
+# -- Run artifacts, not results -------------------------------------------
+# The SQLite iteration traces are raw driver output: regenerate them with
+# `python -m hpraptor_mdao.run sizing --history`. The rendered figure in
+# reports/ is the part worth keeping.
+results/*.sql
+.pytest_cache/

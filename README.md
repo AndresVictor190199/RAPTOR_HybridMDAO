@@ -10,6 +10,10 @@ Architecture selection is posed as a continuous design variable (a softmax relax
 powertrains, with a discreteness penalty that forces a buildable one-hot answer) solved in the
 same gradient-based problem as the wing, the structure and the battery.
 
+**[FRAMEWORK.md](FRAMEWORK.md)** is the full write-up: the model and what has been verified
+about it, an orientation to the code, and an honest list of what is known to be wrong. Read
+Part III before quoting any number from this repository.
+
 ---
 
 ## Install
@@ -42,6 +46,8 @@ python -m hpraptor_mdao.run sizing --geometry-source aerosandbox --aero-source a
 python -m hpraptor_mdao.run mission              # five-phase dymos trajectory
 python -m hpraptor_mdao.run coupled              # sizing + trajectory in one loop
 python -m hpraptor_mdao.run xdsm                 # model diagrams
+python -m hpraptor_mdao.run profiles             # mission-profile comparison, 2D + 3D
+python -m hpraptor_mdao.run sizing --history     # iteration trace, terminal + figure
 python -m hpraptor_mdao.run sizing --dry-run     # print the formulation, solve nothing
 ```
 
@@ -147,11 +153,12 @@ Working: the sizing MDO converges to KKT on all 14 campaign runs; NASADEM ingest
 global endpoints; the architecture relaxation recovers the discrete winner; 3D corridor and
 vehicle visualization; 299 tests.
 
-Open: the coupled sizing-plus-trajectory problem returns feasible designs but exits on
-iteration limit rather than reaching KKT — it needs a real NLP solver (IPOPT/SNOPT via
-pyoptsparse) and better scaling. With taper in the design vector, the relaxed run on the
-AeroSandbox path finds the right architecture but a local planform optimum; the pinned runs
-are the ones to quote.
+Open: see [FRAMEWORK.md Part III](FRAMEWORK.md#part-iii--what-is-known-to-be-wrong). The two
+that most affect a quoted number: the design mission is the **13.58 km corridor**, not the
+50 km `design_range_km` the YAML states (terrain supersedes it), and the `all_electric` rows
+are path-dependent because `k_electric` and `m_fuel` are inert for that architecture. The
+coupled sizing-plus-trajectory problem still exits on iteration limit rather than reaching
+KKT.
 
 ## License
 
