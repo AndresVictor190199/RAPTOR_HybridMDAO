@@ -114,7 +114,7 @@ Primary energy, all 14 runs converging to a KKT exit:
 
 | architecture | analytical | aerosandbox | η fuel |
 |---|---|---|---|
-| **all_electric** | **57.64** | **54.68** | — |
+| **all_electric** | **57.64** | **54.7 – 55.0** ⚠ | — |
 | series | 63.75 | 60.42 | 0.094 |
 | parallel | 61.60 | 58.55 | 0.096 |
 | series_parallel | 63.75 | 60.42 | 0.097 |
@@ -123,6 +123,11 @@ Primary energy, all 14 runs converging to a KKT exit:
 | relaxed | 57.15 | 54.71 | → all_electric |
 
 The relaxation recovers the best discrete architecture on both fidelity paths.
+
+⚠ The `all_electric` AeroSandbox cell is a range, not a value. Four runs of the identical
+problem gave 54.81, 54.97, 54.68 and 54.97 Wh; the table in `results/` shows whichever the
+last run produced. See Part III §2 — that row is not reproducible and no single figure from it
+should be quoted.
 
 **Read this table carefully.** At 13.58 km every architecture converges to `m_fuel = 0`: the
 hybrids decline to use their own fuel path, so the ranking is driven entirely by powerplant
@@ -316,10 +321,10 @@ result becomes path-dependent.
 
 On the analytical path the same problem, differing only by one extra `run_model()` call before
 the driver, converges to 57.18 Wh or 57.64 Wh — differing almost entirely in taper (0.356 vs
-0.652), with the better point feasible in both cases. On the AeroSandbox path three separate
-campaign runs of the *identical* problem gave **54.81, 54.97 and 54.68 Wh** (26, 26 and 48
-iterations). Every other architecture reproduces to the printed digits across the same runs;
-only `all_electric` moves.
+0.652), with the better point feasible in both cases. On the AeroSandbox path four separate
+campaign runs of the *identical* problem gave **54.81, 54.97, 54.68 and 54.97 Wh** (26, 26, 48
+and 26 iterations) — it does not drift, it alternates between distinct optima. Every other
+architecture reproduces to the printed digits across all four runs; only `all_electric` moves.
 
 **The `all_electric` rows are not reliable global optima, and the spread is the same order as
 the margin by which all-electric wins the campaign.** Fix: drop `k_electric` and `m_fuel` from
