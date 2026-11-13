@@ -8,12 +8,12 @@ from .cruise_problem import (
 from .mission_ode import MissionPhaseODE
 from .mission_problem import (
     build_mission_problem, run_mission, run_mission_multistart,
-    MissionEnergyComp, PHASE_SETUP,
+    MissionEnergyComp, PHASE_SETUP, load_vehicle,
 )
 
 __all__ = [
     "CruiseODE", "build_cruise_problem", "run_cruise", "run_cruise_multistart",
     "MissionPhaseODE", "build_mission_problem", "run_mission", "run_mission_multistart",
     "ArchWeightsComp", "CruiseEnergyComp", "MissionEnergyComp",
-    "PHASE_SETUP", "ARCH_NAMES",
+    "PHASE_SETUP", "ARCH_NAMES", "load_vehicle",
 ]

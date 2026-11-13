@@ -1,5 +1,5 @@
 
-  sizing  (67 outputs)
+  sizing  (68 outputs)
       Re_cruise                         5e+05 -        Chord Reynolds number at the cruise condition
       g8_reynolds                           0 -        1 - Re_cruise/Re_min; <= 0 keeps the design inside t
       C_D0                               0.02 -        Zero-lift drag coefficient
@@ -13,6 +13,7 @@
       fuel_flow                        0.0001 kg/s     
       P_elec_bus                          300 W        
       fuel_lhv                        4.3e+07 J/kg     
+      eta_fuel_cruise                     0.3 -        Blended fuel-path efficiency at the cruise operating
       fuel_capable                          1 -        Blended ability to convert fuel to shaft power; 0 fo
       penalty_discreteness                0.8 -        sum w_i(1-w_i); 0 when a single architecture is chos
       E_battery_wh                        250 W*h      

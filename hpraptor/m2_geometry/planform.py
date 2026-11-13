@@ -122,6 +122,21 @@ class WingPlanform:
         return e_theo * VISCOUS_CORRECTION
 
     @property
+    def lift_curve_slope(self) -> float:
+        """
+        Finite-wing lift-curve slope dC_L/dalpha [1/rad], Helmbold/DATCOM
+        for an unswept wing with section slope 2*pi*eta, eta = 0.95:
+
+            a = 2 pi AR / (2 + sqrt(AR^2 / eta^2 + 4))
+
+        Used by the gust load factor (m3) and by the trajectory's lift
+        model (m6), which previously carried a constant 5.0 regardless of
+        the aspect ratio the optimizer chose.
+        """
+        eta = 0.95
+        return 2.0 * np.pi * self.AR / (2.0 + np.sqrt(self.AR ** 2 / eta ** 2 + 4.0))
+
+    @property
     def wetted_area(self) -> float:
         """
         Wetted area (both surfaces) [m²], with a thin-wing correction

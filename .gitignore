@@ -36,6 +36,7 @@ Thumbs.db
 data/TIF_files/
 *.tif
 *.npz
+!data/dem/*.npz
 
 # Figures (generated)
 figures/*.png
@@ -62,12 +63,9 @@ reports/*_out/
 HybridRaptor/
 
 # ── Generated artifacts that are cheap to rebuild ────────────────────────
-# The DEM is a cache: one OpenTopography call and ~13 s rebuilds it, and the
-# .npz files run to megabytes each. Keeping them out means the repo carries
-# the recipe rather than the result, and nobody pulls 12 MB of terrain they
-# will re-fetch anyway. Rebuild:
+# data/dem/ is tracked (about 12 MB) so a fresh clone runs without re-fetching
+# terrain. It can still be rebuilt with:
 #   python -m hpraptor.m1_mission.srtm_downloader --mission configs/<x>.yaml
-data/dem/
 
 # The interactive 3D pages embed the whole scene as base64 VTK -- 6-13 MB
 # each. The static plates next to them are committed; regenerate these with

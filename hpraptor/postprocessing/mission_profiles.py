@@ -81,7 +81,7 @@ def collect_profiles(mission, terrain=None, dem=None,
         build_terrain_context, build_terrain_model)
     # These two helpers still live in the legacy entry script; the MDAO
     # layer imports them from there too.
-    from run_mission import _facility_nodes_from_mission, _resolve_dem_path
+    from hpraptor.m1_mission.dem_resolve import facility_nodes_from_mission as _facility_nodes_from_mission, resolve_dem_path as _resolve_dem_path
 
     dem_path = _resolve_dem_path(mission)
     dem = dem or DEMInterface(dem_path)

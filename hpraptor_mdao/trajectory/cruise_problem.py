@@ -28,7 +28,7 @@ import dymos as dm
 
 from hpraptor.m5_propulsion.architecture_index import ContinuousArchitectureManager
 from hpraptor.m5_propulsion.architecture_np import softmax_weights, discreteness_penalty
-from hpraptor.m5_propulsion.vehicles import series_hybrid_config
+from hpraptor.m5_propulsion.technology import build_base_manager
 from hpraptor_mdao.trajectory.cruise_ode import CruiseODE
 
 ARCH_NAMES = ContinuousArchitectureManager.ARCH_NAMES
@@ -69,8 +69,8 @@ class CruiseEnergyComp(om.ExplicitComponent):
     """
 
     def initialize(self):
-        self.options.declare("penalty_scale", default=0.5, types=float,
-                             desc="lambda on the discreteness penalty [MJ]")
+        self.options.declare("penalty_scale", default=1.0, types=float,
+                             desc="mu, relative weight of the discreteness penalty")
 
     def setup(self):
         self.add_input("fuel_burned", val=0.05, units="kg")
@@ -92,21 +92,24 @@ class CruiseEnergyComp(om.ExplicitComponent):
         total_mj = (fuel_j + batt_j) / 1.0e6
 
         outputs["energy_total_mj"] = total_mj
-        outputs["objective"] = (total_mj + self.options["penalty_scale"]
-                                * inputs["penalty_discreteness"][0])
+        outputs["objective"] = total_mj * (1.0 + self.options["penalty_scale"]
+                                           * inputs["penalty_discreteness"][0])
 
 
 def build_cruise_problem(
     distance_m: float = 8000.0,
-    altitude_m: float = 2900.0,
-    m_initial_kg: float = 20.0,
-    S_ref: float = 0.72,
-    AR: float = 10.0,
-    C_D0: float = 0.020,
-    E_batt_wh: float = 250.0,
+    altitude_m: float = 3126.0,
+    m_initial_kg: float = 11.3,
+    S_ref: float = 0.28,
+    AR: float = 17.5,
+    C_D0: float = 0.040,
+    E_batt_wh: float = 145.0,
+    m_battery_kg: float = 0.83,
+    P_cm_rated: float = 1000.0,
+    P_conv_rated: float = 420.0,
     num_segments: int = 8,
     order: int = 3,
-    penalty_scale: float = 0.5,
+    penalty_scale: float = 1.0,
     fixed_architecture: Optional[str] = None,
     optimizer: str = "SLSQP",
 ) -> om.Problem:
@@ -117,7 +120,7 @@ def build_cruise_problem(
         Pin the architecture (one-hot z, not a design variable) to produce
         the discrete baselines the relaxed run is validated against.
     """
-    base_manager = ContinuousArchitectureManager(series_hybrid_config(m_tow=m_initial_kg))
+    base_manager = build_base_manager()
     E_batt_J = E_batt_wh * 3600.0
 
     prob = om.Problem()
@@ -154,6 +157,10 @@ def build_cruise_problem(
     phase.add_parameter("E_batt_J", val=E_batt_J, units="J", static_target=False, opt=False)
     phase.add_parameter("arch_weights", val=np.ones(N_ARCH) / N_ARCH,
                         shape=(N_ARCH,), static_target=False, opt=False)
+    phase.add_parameter("P_cm_rated", val=P_cm_rated, units="W", static_target=False, opt=False)
+    phase.add_parameter("P_conv_rated", val=np.full(N_ARCH, P_conv_rated), units="W",
+                        shape=(N_ARCH,), static_target=False, opt=False)
+    phase.add_parameter("m_battery", val=m_battery_kg, units="kg", static_target=False, opt=False)
 
     # Fly exactly the required ground distance.
     phase.add_boundary_constraint("x", loc="final", equals=distance_m, ref=distance_m)

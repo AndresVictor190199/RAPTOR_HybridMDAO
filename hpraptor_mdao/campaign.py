@@ -13,8 +13,14 @@ which.
 Each architecture is run **pinned**, not relaxed. Pinning holds ``z_arch``
 one-hot and removes it from the design vector, so the row is a clean
 single-architecture optimum. The relaxed run is a separate row: it lets the
-optimizer choose, and the interesting comparison is whether it lands on the
-same design as the pinned winner.
+optimizer choose — by multistart, one warm start per architecture, because
+the discreteness penalty has exactly zero gradient at the symmetric start —
+and the interesting comparison is whether it lands on the pinned winner.
+
+Every row is built by ``build_problem`` and solved as built. The campaign
+used to call ``setup()`` a second time, which silently reset every initial
+value to the declared defaults, so campaign rows and single sizing runs of
+the same problem started from different points.
 
 Usage
 -----
@@ -46,6 +52,7 @@ COLUMNS = [
     ("m_battery",          "m_batt",        "{:.3f}",   ">7"),
     ("m_fuel_carried",     "m_fuel",        "{:.3f}",   ">7"),
     ("k_electric",         "k_elec",        "{:.3f}",   ">7"),
+    ("k_electric_design",  "k_des",         "{:.3f}",   ">7"),
     ("m_propulsion",       "m_prop",        "{:.3f}",   ">7"),
     ("solver.nit",         "iters",         "{:d}",     ">6"),
     ("solver.nfev",        "nfev",          "{:d}",     ">6"),
@@ -56,15 +63,16 @@ COLUMNS = [
 
 #: Constraints reported in the second table. Anything > 0 is a violation.
 CONSTRAINTS = [
-    ("g1_cl_margin",         "g1 stall"),
-    ("g2_energy_margin",     "g2 energy"),
-    ("g3_soc_margin",        "g3 SOC"),
-    ("g4_stress_margin",     "g4 stress"),
-    ("g5_terrain_clearance", "g5 terrain"),
-    ("g6_battery_power",     "g6 C-rate"),
-    ("g7_rotor_fit",         "g7 rotor"),
-    ("g8_reynolds",          "g8 Re"),
-    ("g10_fuel_energy",      "g10 fuel"),
+    ("g1_cl_margin",           "g1 stall"),
+    ("g3_soc_margin",          "g3 SOC"),
+    ("g4_stress_margin",       "g4 stress"),
+    ("g5_terrain_clearance",   "g5 terrain"),
+    ("g6_battery_power",       "g6 C-rate"),
+    ("g7_rotor_fit",           "g7 rotor"),
+    ("g8_reynolds",            "g8 Re"),
+    ("g10_fuel_energy",        "g10 fuel"),
+    ("g3_soc_margin_design",   "g3 SOC dR"),
+    ("g10_fuel_energy_design", "g10 fuel dR"),
 ]
 
 
@@ -94,6 +102,7 @@ def run_campaign(
     converged onto.
     """
     from hpraptor_mdao import ARCH_NAMES, build_problem, run_optimization
+    from hpraptor_mdao.problem import run_multistart
 
     if architectures is None:
         architectures = list(ARCH_NAMES) + [None]
@@ -109,18 +118,21 @@ def run_campaign(
             if verbose:
                 print(f"  [{n:>2}/{total}] {label:<22} {source}", end="", flush=True)
 
-            prob = build_problem(
-                mission=mission, terrain=terrain, fixed_architecture=arch,
-                geometry_source=source, aero_source=source,
-            )
-            prob.setup()
+            kwargs = dict(mission=mission, terrain=terrain,
+                          geometry_source=source, aero_source=source)
             t0 = time.perf_counter()
             try:
-                result = run_optimization(prob, verbose=False)
+                if arch is None:
+                    if verbose:
+                        print()
+                    result = run_multistart(kwargs, verbose=verbose)
+                    if result is None:
+                        raise RuntimeError("no warm start produced a result")
+                else:
+                    prob = build_problem(fixed_architecture=arch, **kwargs)
+                    result = run_optimization(prob, verbose=False)
             except Exception as exc:                       # pragma: no cover
-                # One failing architecture must not lose the other thirteen
-                # rows -- the table is the deliverable, and a gap in it is
-                # more informative than an aborted run.
+                # One failing architecture must not lose the other rows.
                 if verbose:
                     print(f"   FAILED  {type(exc).__name__}: {exc}")
                 rows.append({"architecture": label, "aero": source,
@@ -136,9 +148,11 @@ def run_campaign(
 
             if verbose:
                 status = _dig(result, "solver.exit_status") or "?"
-                print(f"   {result['energy_primary_wh']:8.2f} Wh   "
+                prefix = "        relaxed ->" if arch is None else ""
+                print(f"{prefix}   {result['energy_primary_wh']:8.2f} Wh   "
                       f"{_dig(result, 'solver.nit') or -1:>3} it   "
-                      f"{wall:5.1f} s   {status}")
+                      f"{wall:6.1f} s   {status}"
+                      f"{'' if result.get('feasible', True) else '   INFEASIBLE'}")
     return rows
 
 
@@ -247,19 +261,15 @@ def best_row(rows):
     The best FEASIBLE design in the campaign, highest-fidelity path first.
 
     Feasibility is checked here rather than trusted: an optimizer that exits
-    FAIL still returns a design vector, and at long range the all-electric
-    runs return one that violates its own energy balance. Picking the
-    minimum objective without checking would hand the vehicle renderer an
-    aircraft that cannot fly the mission.
+    FAIL still returns a design vector, and a renderer handed the minimum
+    objective without a check could draw an aircraft that cannot fly.
     """
-    gates = ("g1_cl_margin", "g2_energy_margin", "g3_soc_margin",
-             "g4_stress_margin", "g6_battery_power", "g7_rotor_fit",
-             "g10_fuel_energy")
+    from hpraptor_mdao.problem import FEASIBILITY_KEYS
     for source in ("aerosandbox", "analytical"):
         pool = [r for r in rows
                 if r.get("aero") == source and "failed" not in r
-                and r.get("success")
-                and all(r.get(g, -1.0) <= 1e-4 for g in gates)]
+                and r.get("success") and r.get("pinned", True)
+                and all(r.get(g, -1.0) <= 1e-4 for g in FEASIBILITY_KEYS)]
         if pool:
             return min(pool, key=lambda r: r["energy_primary_wh"])
     return None

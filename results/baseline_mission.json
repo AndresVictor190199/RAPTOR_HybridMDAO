@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "objective": 0.364542170459786,
+  "energy_total_mj": 0.36453772445693233,
+  "penalty_discreteness": 8.892005707304101e-06,
+  "fuel_burned_kg": 0.0004565423377655975,
+  "soc_final": 0.6167706631084476,
+  "range_m": 13584.391591951526,
+  "phase_durations_s": {
+    "vtol_climb": 20.833333333333332,
+    "transition_fw": 31.013464946540136,
+    "cruise": 317.451084815126,
+    "transition_bw": 7.863125379277136,
+    "vtol_land": 25.0
+  },
+  "total_time_s": 402.1610084742766,
+  "arch_weights": {
+    "all_electric": 7.987002634186439e-07,
+    "series": 3.5876201267038413e-06,
+    "parallel": 2.368579280325821e-08,
+    "series_parallel": 0.9999955539805078,
+    "turbo_electric": 1.5229912031925816e-08,
+    "fuel_cell": 2.0783397368513326e-08
+  },
+  "dominant_architecture": "series_parallel",
+  "physics_violations": []
+}

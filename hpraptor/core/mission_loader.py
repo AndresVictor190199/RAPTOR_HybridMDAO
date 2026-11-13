@@ -45,11 +45,16 @@ class MissionRequirements:
     cruise_speed_ms: float = 30.0
     cruise_altitude_strategy: str = "auto"  # "auto" or a float [m AMSL]
     endurance_min: Optional[float] = None
-    design_range_km: float = 50.0            # Design range for vehicle sizing [km]
+    # Capability requirement: the vehicle must be ABLE to fly this ground
+    # distance (same pads, same terrain profile, cruise stretched), on top of
+    # flying the corridor it is optimised for. None = corridor only.
+    design_range_km: Optional[float] = 50.0  # Design range for vehicle sizing [km]
     design_endurance_min: float = 60.0       # Design endurance for vehicle sizing [min]
     vtol_climb_rate_ms: float = 3.0
     vtol_descent_rate_ms: float = 2.5
     fw_climb_angle_deg: float = 8.0
+    # Wingborne descent angle; None = same as the climb angle.
+    fw_descent_angle_deg: Optional[float] = None
     # "auto" = build all PathBuilder strategies and keep the lowest-energy
     # one; or force one of "high_overfly" / "terrain_follow" / "minimal_energy".
     path_strategy: str = "auto"
@@ -170,6 +175,21 @@ class MissionDefinition:
         )
 
     @property
+    def bearing_deg(self) -> float:
+        """
+        Initial great-circle bearing origin -> destination [deg true].
+
+        The track the wind is projected onto. The trajectory used to assume
+        0 (north) or 22 deg; this corridor runs at ~73 deg.
+        """
+        import numpy as np
+        phi1, phi2 = np.radians(self.origin.lat), np.radians(self.destination.lat)
+        dlam = np.radians(self.destination.lon - self.origin.lon)
+        y = np.sin(dlam) * np.cos(phi2)
+        x = np.cos(phi1) * np.sin(phi2) - np.sin(phi1) * np.cos(phi2) * np.cos(dlam)
+        return float(np.degrees(np.arctan2(y, x)) % 360.0)
+
+    @property
     def range_km(self) -> float:
         return self.range_m / 1000.0
 
@@ -260,11 +280,12 @@ def load_mission(yaml_path: str) -> MissionDefinition:
         cruise_speed_ms=float(req.get('cruise_speed_ms', 30.0)),
         cruise_altitude_strategy=req.get('cruise_altitude_strategy', 'auto'),
         endurance_min=_parse_optional_float(req.get('endurance_min')),
-        design_range_km=float(req.get('design_range_km', 50.0)),
+        design_range_km=_parse_optional_float(req.get('design_range_km', 50.0)),
         design_endurance_min=float(req.get('design_endurance_min', 60.0)),
         vtol_climb_rate_ms=float(req.get('vtol_climb_rate_ms', 3.0)),
         vtol_descent_rate_ms=float(req.get('vtol_descent_rate_ms', 2.5)),
         fw_climb_angle_deg=float(req.get('fw_climb_angle_deg', 8.0)),
+        fw_descent_angle_deg=_parse_optional_float(req.get('fw_descent_angle_deg')),
         path_strategy=str(req.get('path_strategy', 'auto')).strip().lower(),
     )
 

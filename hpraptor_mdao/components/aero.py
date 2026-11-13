@@ -12,7 +12,9 @@ import numpy as np
 import openmdao.api as om
 
 from hpraptor.core.atmosphere import isa_density
-from hpraptor.m4_aero.parasite_drag import parasite_cd0_from_wetted
+from hpraptor.m4_aero.parasite_drag import (
+    parasite_cd0_components, vtol_system_components, FF_TAIL,
+)
 
 G = 9.80665
 
@@ -44,6 +46,16 @@ class AeroComp(om.ExplicitComponent):
         self.add_input("wetted_wing", val=1.5, units="m**2")
         self.add_input("wetted_fuse", val=0.75, units="m**2")
         self.add_input("chord_mean", val=0.27, units="m")
+        # The rest of the aircraft. Tail and VTOL-system drag were absent
+        # from the buildup: the tail areas were computed and discarded, and
+        # two booms plus four stopped rotors were covered by an 8 % "misc"
+        # allowance meant for gear and gaps.
+        self.add_input("wetted_tail", val=0.16, units="m**2")
+        self.add_input("chord_tail", val=0.1, units="m")
+        self.add_input("wetted_booms", val=0.15, units="m**2")
+        self.add_input("boom_length", val=0.9, units="m")
+        self.add_input("A_rotor", val=0.65, units="m**2")
+        self.add_input("rotor_diameter", val=0.45, units="m")
         self.add_input("m_tow", val=20.0, units="kg")
         self.add_input("e_oswald", val=0.78,
                        desc="Span efficiency from AR and taper (m2 geometry)")
@@ -51,6 +63,8 @@ class AeroComp(om.ExplicitComponent):
         self.add_input("altitude", val=2900.0, units="m")
 
         self.add_output("C_D0", val=0.02, desc="Zero-lift drag coefficient")
+        self.add_output("C_D0_vtol", val=0.005,
+                        desc="Share of C_D0 from booms and stopped rotors")
         self.add_output("C_L_cruise", val=0.6)
         self.add_output("C_D_cruise", val=0.04)
         self.add_output("L_D", val=17.0, desc="Cruise lift-to-drag ratio")
@@ -69,14 +83,17 @@ class AeroComp(om.ExplicitComponent):
         e = (self.options["e_oswald"] if self.options["e_oswald"] is not None
              else inputs["e_oswald"][0])
 
-        C_D0 = parasite_cd0_from_wetted(
-            S_ref=S,
-            chord_mean=inputs["chord_mean"][0],
-            wetted_wing=inputs["wetted_wing"][0],
-            fuse_length=inputs["fuse_length"][0],
-            wetted_fuse=inputs["wetted_fuse"][0],
-            airspeed_ms=V, altitude_m=alt,
-        )
+        S_c = inputs["chord_mean"][0]
+        components = [
+            (inputs["wetted_wing"][0], S_c, 1.25),
+            (inputs["wetted_fuse"][0], inputs["fuse_length"][0], 1.15),
+            (inputs["wetted_tail"][0], inputs["chord_tail"][0], FF_TAIL),
+        ]
+        vtol = vtol_system_components(
+            inputs["wetted_booms"][0], inputs["boom_length"][0],
+            inputs["A_rotor"][0], inputs["rotor_diameter"][0])
+        C_D0 = parasite_cd0_components(S, components + vtol, V, alt)
+        C_D0_vtol = parasite_cd0_components(S, vtol, V, alt)
 
         rho = isa_density(alt)
         q = 0.5 * rho * V ** 2
@@ -84,6 +101,7 @@ class AeroComp(om.ExplicitComponent):
         C_D = C_D0 + C_L ** 2 / (np.pi * AR * e)
 
         outputs["C_D0"] = C_D0
+        outputs["C_D0_vtol"] = C_D0_vtol
         outputs["C_L_cruise"] = C_L
         outputs["C_D_cruise"] = C_D
         outputs["L_D"] = C_L / C_D

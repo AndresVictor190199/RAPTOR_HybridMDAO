@@ -695,7 +695,7 @@ def main():
     if args.dem is not None:
         dem_path = args.dem
     else:
-        from run_mission import _resolve_dem_path
+        from hpraptor.m1_mission.dem_resolve import resolve_dem_path as _resolve_dem_path
         dem_path = _resolve_dem_path(mission)
     if dem_path is None:
         raise SystemExit(f"No DEM configured in {args.mission}.")
@@ -745,7 +745,7 @@ def _build_path(mission, dem):
     try:
         from hpraptor.m1_mission.builder import PathBuilder, PathStrategy
         from hpraptor.core.config import UAVConfig
-        from run_mission import _facility_nodes_from_mission
+        from hpraptor.m1_mission.dem_resolve import facility_nodes_from_mission as _facility_nodes_from_mission
 
         uav = UAVConfig(fw_cruise_airspeed=mission.requirements.cruise_speed_ms)
         origin, destination = _facility_nodes_from_mission(mission, dem=dem)

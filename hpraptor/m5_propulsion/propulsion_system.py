@@ -70,13 +70,14 @@ class ElectricMotorParams:
         """Motor efficiency at a given power demand [0–1]."""
         if P_demand <= 0:
             return 0.0
-        load_frac = np.clip(P_demand / self.P_max, 0.01, 1.5)
-        # Parabolic efficiency model peaking at ~80% load
+        load_frac = np.clip(P_demand / self.P_max, 0.0, 1.5)
+        # Finger et al. parabola, peaking at rated load.
         eta = self.eta_max * (1.0 - self.k_loss * (1.0 - load_frac) ** 2)
-        # Degrade at very low and very high loads
-        if load_frac < 0.1:
-            eta *= load_frac / 0.1
-        elif load_frac > 1.0:
+        # Overload penalty. There is deliberately no low-load roll-off: with
+        # eta proportional to load below 10 %, P/eta tends to a CONSTANT as
+        # P -> 0, so a motor commanded off drew ~10 % of its rating forever.
+        # See rotor_power.motor_efficiency, which this mirrors.
+        if load_frac > 1.0:
             eta *= max(0.5, 1.0 - 0.3 * (load_frac - 1.0))
         return np.clip(eta, 0.05, self.eta_max)
 
@@ -517,11 +518,13 @@ class PropulsionSystem:
         if self.architecture == "series":
             # In series: ICE → Generator → adds to electrical bus
             if P_fuel_mech > 0 and self.ice and self.generator:
-                P_gen_shaft = self.generator.shaft_power_required(P_fuel_mech)
+                # The generator supplies the motor's whole electrical demand
+                # for the fuel share. It used to supply only the SHAFT power,
+                # leaving the motor loss on that share to the battery.
+                P_gen_elec = self.motor.electrical_power(P_fuel_mech)
+                P_gen_shaft = self.generator.shaft_power_required(P_gen_elec)
                 fuel_flow = self.ice.fuel_flow_rate(P_gen_shaft, altitude_m)
                 heat_fuel = self.ice.heat_rejection(P_gen_shaft, altitude_m)
-                P_gen_elec = P_fuel_mech  # Generator electrical output
-                P_elec_bus += self.motor.electrical_power(P_fuel_mech) - P_gen_elec
 
         elif self.architecture == "parallel":
             # In parallel: ICE and motor both on same shaft
@@ -538,11 +541,10 @@ class PropulsionSystem:
         elif self.architecture == "turbo_electric":
             # Turbo-electric: gas turbine → generator → motor
             if P_fuel_mech > 0 and self.gas_turbine and self.generator:
-                P_gen_shaft = self.generator.shaft_power_required(P_fuel_mech)
+                P_gen_elec = self.motor.electrical_power(P_fuel_mech)
+                P_gen_shaft = self.generator.shaft_power_required(P_gen_elec)
                 fuel_flow = self.gas_turbine.fuel_flow_rate(P_gen_shaft, altitude_m)
-                heat_fuel = P_gen_shaft - P_fuel_mech  # Generator losses
-                P_gen_elec = P_fuel_mech
-                P_elec_bus += self.motor.electrical_power(P_fuel_mech) - P_gen_elec
+                heat_fuel = P_gen_shaft - P_gen_elec  # Generator losses
 
         elif self.architecture == "fuel_cell":
             # Fuel cell: H₂ → FC → electrical bus

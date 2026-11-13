@@ -30,6 +30,8 @@ import openmdao.api as om
 
 from hpraptor.m5_propulsion.architecture_index import ContinuousArchitectureManager
 from hpraptor.m5_propulsion.architecture_np import NumpyArchitectureManager
+from hpraptor.m5_propulsion import battery_catalogue as batcat
+from hpraptor.m5_propulsion import rotor_power as rp
 
 G = 9.80665
 N_ARCH = 6
@@ -62,6 +64,12 @@ class CruiseODE(om.ExplicitComponent):
         self.add_input("altitude", val=np.full(nn, 2900.0), units="m")
         self.add_input("E_batt_J", val=np.full(nn, 1.0e6), units="J")
         self.add_input("arch_weights", val=np.tile(np.ones(N_ARCH) / N_ARCH, (nn, 1)))
+        # Component ratings and pack mass, as in the mission ODE: the split's
+        # part-load efficiencies are evaluated at the ratings of the aircraft
+        # flown, and the pack's discharge loss at its own cell count.
+        self.add_input("P_cm_rated", val=np.full(nn, 800.0), units="W")
+        self.add_input("P_conv_rated", val=np.full((nn, N_ARCH), 400.0), units="W")
+        self.add_input("m_battery", val=np.full(nn, 1.0), units="kg")
 
         # State rates
         self.add_output("x_dot", val=np.full(nn, 30.0), units="m/s",
@@ -107,14 +115,23 @@ class CruiseODE(om.ExplicitComponent):
         # Blend the six architectures at every node. arch_weights arrives
         # as (nn, 6); the split is evaluated per architecture on the full
         # node vector and then weighted, so this stays one vectorized pass.
-        results = [self._npm.arch_power_split(a, P_shaft, k_e, alt)
-                   for a in self._npm.ARCH_NAMES]
+        P_conv = inputs["P_conv_rated"]
+        results = [self._npm.arch_power_split(
+                       a, P_shaft, k_e, alt,
+                       ratings={"motor": inputs["P_cm_rated"], "lift": inputs["P_cm_rated"],
+                                "conv": P_conv[:, i]})
+                   for i, a in enumerate(self._npm.ARCH_NAMES)]
         fuel_flow = sum(w[:, i] * r["fuel_flow_kg_s"] for i, r in enumerate(results))
         P_bus = sum(w[:, i] * r["P_elec_from_bus"] for i, r in enumerate(results))
 
+        cell = batcat.get_cell()
+        n_cells = batcat.pack_cell_count(inputs["m_battery"], cell)
+        eta_dis = rp.battery_discharge_efficiency(P_bus, n_cells, cell.voltage_nom_v,
+                                                  cell.r_internal_ohm)
+
         outputs["x_dot"] = v
         outputs["m_dot"] = -fuel_flow
-        outputs["SOC_dot"] = -P_bus / E_batt
+        outputs["SOC_dot"] = -P_bus / (eta_dis * E_batt)
 
         outputs["C_L"] = C_L
         outputs["D"] = D

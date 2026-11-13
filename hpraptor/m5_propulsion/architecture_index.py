@@ -165,136 +165,124 @@ class ContinuousArchitectureManager:
 
     def casadi_arch_power_split(self, arch: str, P_demand: Any, k_electric: Any, altitude_m: Any) -> Dict[str, Any]:
         """
-        Differentiable, CasADi-safe power split formulation for each architecture.
-        Uses ca.if_else, ca.fmin, and ca.fmax instead of python if/else conditions.
+        CasADi twin of ``architecture_np.NumpyArchitectureManager.arch_power_split``
+        at the base manager's own ratings (``ratings=None``, ``P_lift=0``).
+
+        Kept structurally identical to the numpy physics so the parity tests
+        keep checking the transliteration: one motor per electric drivetrain
+        with an ESC loss, a saturated converter's shortfall drawn from the
+        battery rather than left unserved, the Willans line on the engine's
+        rating, and series-parallel as a power-split hybrid. The fuel cell
+        keeps a flat 0.55 here; the numpy path solves the polarization curve
+        and is checked against the bisection reference instead.
         """
-        motor = self.prop_systems[arch].motor
-        
-        def ca_motor_electrical_power(P_mech):
-            # Tiny offset for Hessian regularity (1e-10 << 1e-6 to minimize fuel-burn bias)
-            # The smooth_switch gating in each branch handles zeroing the actual output
-            P_safe = P_mech + 1e-10
-            load_frac = _smooth_min_ca(_smooth_max_ca(P_safe / motor.P_max, 0.01), 1.5)
-            eta = motor.eta_max * (1.0 - motor.k_loss * (1.0 - load_frac) ** 2)
-            eta = ca.if_else(load_frac < 0.1, eta * load_frac / 0.1, eta)
-            eta = ca.if_else(load_frac > 1.0, eta * _smooth_max_ca(0.5, 1.0 - 0.3 * (load_frac - 1.0)), eta)
-            eta = _smooth_min_ca(_smooth_max_ca(eta, 0.05), motor.eta_max)
-            return P_safe / eta
+        from hpraptor.m5_propulsion.technology import DEFAULT_TECHNOLOGY
+        tech = getattr(self, "technology", None) or DEFAULT_TECHNOLOGY
+        ps = self.prop_systems[arch]
+        motor = ps.motor
 
-        # Clamp the split to [0, 1] here rather than trusting the caller.
-        # A collocation optimizer enforces control bounds only at the
-        # discretization nodes, so k_electric can overshoot between them;
-        # k > 1 makes P_fuel_mech negative, flipping the sign of the
-        # fuel-flow gate and letting the vehicle gain mass and recharge its
-        # battery from nothing.
-        k_clamped = _smooth_min_ca(_smooth_max_ca(k_electric, 0.0), 1.0)
+        def smax(a, b, scale=1.0):
+            return _smooth_max_ca(a, b, scale=scale)
 
-        P_elec_mech = P_demand * k_clamped
-        P_fuel_mech = P_demand * (1.0 - k_clamped)
-        
-        P_elec_bus = ca_motor_electrical_power(P_elec_mech)
-        heat_motor = P_elec_bus - P_elec_mech
-        
+        def smin(a, b, scale=1.0):
+            return _smooth_min_ca(a, b, scale=scale)
+
+        def drive(P_mech, P_rated):
+            P_pos = smax(P_mech, 0.0, scale=0.01 * P_rated)
+            x = smin(smax(P_pos / P_rated, 0.0, scale=0.01), 1.5, scale=0.01)
+            eta = motor.eta_max * (1.0 - motor.k_loss * (1.0 - x) ** 2)
+            eta = ca.if_else(x > 1.0, eta * smax(0.5, 1.0 - 0.3 * (x - 1.0)), eta)
+            eta = smin(smax(eta, 0.05), motor.eta_max)
+            return P_pos / (eta * tech.esc_eta)
+
+        def switch(P):
+            return ca.tanh(ca.fmin(ca.fmax(P / 10.0, -30.0), 30.0))
+
+        def density():
+            T_loc = smax(288.15 - 0.0065 * altitude_m, 200.0, scale=288.15)
+            return 1.225 * (T_loc / 288.15) ** 4.255877, T_loc
+
+        def willans(P_shaft, r_conv):
+            b = ps.ice.BSFC_rated / 3.6e9
+            return ps.ice.idle_fuel_frac * b * r_conv + b * P_shaft
+
+        k = smin(smax(k_electric, 0.0, scale=0.01), 1.0, scale=0.01)
+        bus_lift = drive(0.0 * P_demand, motor.P_max)
         fuel_flow = 0.0
-        heat_fuel = 0.0
-        P_gen_elec = 0.0
-        
+        conv_loss = 0.0
+
         if arch == "all_electric":
-            # No fuel path exists here, so the battery must carry the ENTIRE
-            # shaft demand regardless of what k_electric says. Splitting the
-            # demand and leaving the fuel share unserved let
-            # (1-k_electric)*P_demand be delivered from nowhere — an
-            # energy-conservation hole a trajectory optimizer exploits by
-            # driving k_electric toward 0.
-            P_elec_bus = ca_motor_electrical_power(P_demand)
-            heat_motor = P_elec_bus - P_demand
+            P_bus = drive(P_demand, motor.P_max) + bus_lift
+            P_batt = P_bus
+            P_motor_shaft = P_demand
 
-        elif arch == "series":
-            ice = self.prop_systems[arch].ice
-            gen = self.prop_systems[arch].generator
-            eta_gen = gen.eta_rated if gen else 0.90
-            P_gen_shaft = P_fuel_mech / eta_gen
-            
-            # ISA density derating inside CasADi
-            T_raw = 288.15 - 0.0065 * altitude_m
-            T_loc = 0.5 * (T_raw + 200.0 + ca.sqrt((T_raw - 200.0) ** 2 + 0.01))
-            rho = 1.225 * (T_loc / 288.15) ** 4.255877
-            P_max_ice = ice.P_max_sl * (rho / 1.225) ** ice.altitude_derating_exp
-            P_actual = _smooth_min_ca(_smooth_max_ca(P_gen_shaft, 0.0, scale=ice.P_max_sl),
-                                       P_max_ice, scale=ice.P_max_sl)
+        elif arch in ("series", "turbo_electric", "fuel_cell"):
+            P_bus = drive(P_demand, motor.P_max) + bus_lift
+            want = (1.0 - k) * P_bus
+            sw = switch(want)
+            if arch == "series":
+                r_c = ps.ice.P_max_sl
+                eta_gen = ps.generator.eta_rated if ps.generator else tech.gen_eta
+                rho, _ = density()
+                avail = eta_gen * r_c * (rho / 1.225) ** ps.ice.altitude_derating_exp
+                P_gen = smin(want, avail, scale=r_c)
+                fuel_flow = sw * willans(P_gen / eta_gen, r_c)
+                lhv = ps.ice.fuel_lhv
+            elif arch == "turbo_electric":
+                gt = ps.gas_turbine
+                r_c = gt.P_max_sl
+                eta_gen = ps.generator.eta_rated if ps.generator else tech.gen_eta
+                rho, T_loc = density()
+                P_av = r_c * (rho / 1.225) * smin((288.15 / T_loc) ** 0.5, 1.1)
+                P_gen = smin(want, eta_gen * P_av, scale=r_c)
+                P_eng = P_gen / eta_gen
+                x = smin(smax(P_eng / (P_av + 1e-10), 0.05), 1.0)
+                sfc = gt.SFC_design * (gt.sfc_c0 + gt.sfc_c1 * x + gt.sfc_c2 * x ** 2) / x
+                fuel_flow = sw * sfc * P_eng / 3.6e9
+                lhv = gt.fuel_lhv
+            else:
+                fc = ps.fuel_cell
+                P_gen = want
+                fuel_flow = sw * P_gen / (0.55 * fc.h2_lhv)
+                lhv = fc.h2_lhv
+            P_batt = P_bus - P_gen
+            conv_loss = fuel_flow * lhv - P_gen
+            P_motor_shaft = P_demand
 
-            # Willans line. Note there is deliberately NO smooth_max floor here:
-            # numpy's ICEngineParams.fuel_flow_rate() applies max(m_dot, _a*0.5),
-            # but with m_dot = _a + _b*P_actual and _b, P_actual >= 0 we always
-            # have m_dot >= _a > 0.5*_a, so that guard can never bind. Smoothing
-            # an unreachable branch here previously injected a ~0.05 kg/s floor
-            # into a quantity of order 1e-4 kg/s (see _smoothing_eps).
-            fuel_flow = ice._a + ice._b * P_actual
-            # Sharper smooth transition at P_fuel_mech ≈ 0 to suppress idle fuel consumption
-            smooth_switch = ca.tanh(P_fuel_mech / 10.0)
-            fuel_flow = smooth_switch * fuel_flow
-            P_gen_elec = P_fuel_mech
-            # Gate entire fuel-path electrical contribution to avoid 0/eta Hessian NaN
-            fuel_elec_contrib = smooth_switch * (ca_motor_electrical_power(P_fuel_mech) - P_gen_elec)
-            P_elec_bus = P_elec_bus + fuel_elec_contrib
-            heat_fuel = smooth_switch * (P_gen_shaft - P_gen_elec + (fuel_flow * ice.fuel_lhv - P_gen_shaft))
-            
-        elif arch in ("parallel", "series_parallel"):
-            ice = self.prop_systems[arch].ice
-            T_raw = 288.15 - 0.0065 * altitude_m
-            T_loc = 0.5 * (T_raw + 200.0 + ca.sqrt((T_raw - 200.0) ** 2 + 0.01))
-            rho = 1.225 * (T_loc / 288.15) ** 4.255877
-            P_max_ice = ice.P_max_sl * (rho / 1.225) ** ice.altitude_derating_exp
-            P_actual = _smooth_min_ca(_smooth_max_ca(P_fuel_mech, 0.0, scale=ice.P_max_sl),
-                                       P_max_ice, scale=ice.P_max_sl)
+        elif arch == "parallel":
+            r_c = ps.ice.P_max_sl
+            rho, _ = density()
+            want = (1.0 - k) * P_demand
+            P_eng = smin(want, r_c * (rho / 1.225) ** ps.ice.altitude_derating_exp, scale=r_c)
+            fuel_flow = switch(want) * willans(P_eng, r_c)
+            P_bus = drive(P_demand - P_eng, motor.P_max) + bus_lift
+            P_batt = P_bus
+            conv_loss = fuel_flow * ps.ice.fuel_lhv - P_eng
+            P_motor_shaft = P_demand - P_eng
 
-            # Willans line — no smooth_max floor; see the series branch above.
-            fuel_flow = ice._a + ice._b * P_actual
-            # Sharper smooth transition at P_fuel_mech ≈ 0 to suppress idle fuel consumption
-            smooth_switch = ca.tanh(P_fuel_mech / 10.0)
-            fuel_flow = smooth_switch * fuel_flow
-            heat_fuel = smooth_switch * (fuel_flow * ice.fuel_lhv - P_fuel_mech)
- 
-        elif arch == "turbo_electric":
-            gt = self.prop_systems[arch].gas_turbine
-            gen = self.prop_systems[arch].generator
-            eta_gen = gen.eta_rated if gen else 0.92
-            P_gen_shaft = P_fuel_mech / eta_gen
-            
-            T_raw = 288.15 - 0.0065 * altitude_m
-            T_loc = 0.5 * (T_raw + 200.0 + ca.sqrt((T_raw - 200.0) ** 2 + 0.01))
-            rho = 1.225 * (T_loc / 288.15) ** 4.255877
-            P_max_gt = gt.P_max_sl * (rho / 1.225) * _smooth_min_ca((288.15 / T_loc) ** 0.5, 1.1)
-            x_ratio = _smooth_min_ca(_smooth_max_ca(P_gen_shaft / (P_max_gt + 1e-10), 0.05), 1.0)
-            
-            # Part-load lapse: /x_ratio, matching GasTurbineParams and the
-            # numpy twin. See the SFC note on GasTurbineParams.
-            sfc = gt.SFC_design * (
-                gt.sfc_c0 + gt.sfc_c1 * x_ratio + gt.sfc_c2 * x_ratio**2
-            ) / x_ratio
-            fuel_flow = sfc * (P_gen_shaft / 1e3) / (1e3 * 3600)
-            # Sharper smooth transition at P_fuel_mech ≈ 0 to suppress idle fuel consumption
-            smooth_switch = ca.tanh(P_fuel_mech / 10.0)
-            fuel_flow = smooth_switch * fuel_flow
-            P_gen_elec = P_fuel_mech
-            # Gate entire fuel-path electrical contribution to avoid 0/eta Hessian NaN
-            fuel_elec_contrib = smooth_switch * (ca_motor_electrical_power(P_fuel_mech) - P_gen_elec)
-            P_elec_bus = P_elec_bus + fuel_elec_contrib
-            heat_fuel = smooth_switch * (P_gen_shaft - P_gen_elec + (fuel_flow * gt.fuel_lhv - P_gen_shaft))
- 
-        elif arch == "fuel_cell":
-            fc = self.prop_systems[arch].fuel_cell
-            eta_fc = 0.55
-            # Sharper smooth transition at P_fuel_mech ≈ 0 to suppress idle fuel consumption
-            smooth_switch = ca.tanh(P_fuel_mech / 10.0)
-            P_fc_elec = ca_motor_electrical_power(P_fuel_mech)
-            fuel_flow = smooth_switch * P_fc_elec / (eta_fc * fc.h2_lhv)
-            heat_fuel = smooth_switch * P_fc_elec * (1.0 / eta_fc - 1.0)
+        elif arch == "series_parallel":
+            r_c = ps.ice.P_max_sl
+            s = tech.sp_mech_fraction
+            eta_gen = ps.generator.eta_rated if ps.generator else tech.gen_eta
+            eta_ref = motor.eta_max * tech.esc_eta
+            rho, _ = density()
+            want = (1.0 - k) * P_demand / (s + (1.0 - s) * eta_gen * eta_ref)
+            P_eng = smin(want, r_c * (rho / 1.225) ** ps.ice.altitude_derating_exp, scale=r_c)
+            fuel_flow = switch(want) * willans(P_eng, r_c)
+            P_direct = s * P_eng
+            P_gen = (1.0 - s) * eta_gen * P_eng
+            P_bus = drive(P_demand - P_direct, motor.P_max) + bus_lift
+            P_batt = smax(P_bus - P_gen, 0.0, scale=motor.P_max)
+            conv_loss = fuel_flow * ps.ice.fuel_lhv - P_direct - P_gen
+            P_motor_shaft = P_demand - P_direct
+
+        else:
+            raise ValueError(f"Unknown architecture: {arch!r}")
 
         return {
-            'P_elec_from_bus': P_elec_bus,
+            'P_elec_from_bus': P_batt,
             'fuel_flow_kg_s': fuel_flow,
-            'heat_total': heat_motor + heat_fuel
+            'heat_total': (P_bus - P_motor_shaft) + conv_loss,
         }
 
     def blend_power_split(self, weights: Union[np.ndarray, Any], P_demand: float,

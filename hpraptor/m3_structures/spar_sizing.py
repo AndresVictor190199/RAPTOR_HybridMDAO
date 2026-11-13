@@ -50,14 +50,14 @@ class WingLoadCase:
     mtow_kg : float
         Maximum takeoff mass [kg] — the weight the wing must carry.
     load_factor_ultimate : float
-        Ultimate load factor n_ult [-]. Default 3.8 matches the spec's
-        g4 constraint (a 2.5g limit load with a standard 1.5x ultimate
-        factor gives n_ult = 3.75; 3.8 is the conventional CS-23/FAR-23
-        rounded value used in the spec).
+        Despite its name, the LIMIT load factor the stress is evaluated at.
+        Default 3.8 is the CS-23 normal-category limit manoeuvre factor. The
+        ultimate factor is applied separately, on the allowable stress.
     safety_factor : float
-        Additional margin applied to material yield stress to get the
-        allowable stress (sigma_allow = yield / safety_factor). Default
-        1.5, matching the spec's g4 constraint exactly.
+        Factor of safety (1.5, CS-23.303), applied as sigma_allow =
+        strength / safety_factor. Together with the limit load factor this
+        checks the spar at the ultimate load n_limit * 1.5 against the
+        material strength — the factor is applied once, not twice.
     """
     mtow_kg: float
     load_factor_ultimate: float = 3.8

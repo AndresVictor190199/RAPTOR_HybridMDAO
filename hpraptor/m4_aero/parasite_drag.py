@@ -163,3 +163,56 @@ def parasite_cd0_from_wetted(
     cd0_fuse = cf_fuse * form_factor_fuselage * wetted_fuse / S_ref
     clean = cd0_wing + cd0_fuse
     return clean * (1.0 + misc_drag_fraction)
+
+
+def parasite_cd0_components(S_ref, components, airspeed_ms, altitude_m,
+                            misc_drag_fraction: float = 0.08):
+    """
+    C_D0 from an arbitrary list of wetted components.
+
+    ``components`` is a sequence of ``(wetted_area, reference_length,
+    form_factor)``, each charged turbulent flat-plate friction at its own
+    Reynolds number. ``misc_drag_fraction`` covers what is not listed —
+    landing gear, hubs, gaps, antennae.
+
+    This exists because the wing-plus-fuselage buildup left out the parts of
+    the aircraft that this model itself sizes: the tail (whose areas the
+    geometry computed and then discarded) and the whole VTOL system — two
+    booms and four stopped lift rotors — which on a quadplane is commonly a
+    quarter or more of the cruise drag. An 8 % "misc" factor was standing in
+    for all of it.
+
+    Complex-step safe: no branches beyond the real-part floor in Cf.
+    """
+    rho = isa_density(altitude_m)
+    mu = isa_viscosity(altitude_m)
+    clean = 0.0
+    for wetted, length, ff in components:
+        cf = flat_plate_cf(rho * airspeed_ms * length / mu)
+        clean = clean + cf * ff * wetted / S_ref
+    return clean * (1.0 + misc_drag_fraction)
+
+
+#: Form factors for the VTOL-system and tail components (Raymer Ch. 12;
+#: Hoerner). Thin tail sections, slender cylindrical booms, and stopped
+#: blades aligned with the flow.
+FF_TAIL = 1.20
+FF_BOOM = 1.10
+FF_STOPPED_BLADE = 1.20
+
+
+def vtol_system_components(boom_wetted, boom_length, A_rotor, rotor_diameter,
+                           solidity: float = 0.07, n_blades: int = 2):
+    """
+    Wetted components of the booms and the four stopped lift rotors.
+
+    Stopped blades are counted as thin surfaces aligned with the flow: two
+    faces of the blade planform (solidity x disk area), at the blade chord's
+    Reynolds number. Used by both fidelity paths, since AeroSandbox's
+    AeroBuildup does not model booms or stopped rotors either.
+    """
+    blade_chord = solidity * np.pi * (0.5 * rotor_diameter) / n_blades
+    return [
+        (boom_wetted, boom_length, FF_BOOM),
+        (2.0 * solidity * A_rotor, blade_chord, FF_STOPPED_BLADE),
+    ]

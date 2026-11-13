@@ -1,240 +1,351 @@
 """
 Mission energy and storage sizing, plus the mass-closure component.
 
-EnergyComp sizes the battery (VTOL energy + peak power) and the fuel
-(Breguet), and reports the mission energy that the optimizer minimizes.
-WeightsComp closes the mass loop — its `m_tow` output feeds back to
-m2/m3, and that feedback edge is what the group's nonlinear solver
-converges.
+EnergyComp flies the design mission segment by segment and sizes the
+battery and fuel against it. WeightsComp closes the mass loop — its `m_tow`
+output feeds back to m2/m3, and that feedback edge is what the group's
+nonlinear solver converges.
+
+The mission (EnergyComp)
+------------------------
+Seven segments, the same sequence the dymos trajectory flies, each with the
+physics that governs it:
+
+    1  VTOL climb        axial momentum theory with the climb term T*V_c
+    2  transition fwd    rotor thrust handed to the wing as speed builds;
+                         Glauert edgewise inflow; propeller accelerates
+    3  wingborne climb   to cruise altitude at the climb angle
+    4  cruise            the architecture's own battery/fuel split
+    5  wingborne descent at the same angle; the propeller only makes up
+                         the drag gravity does not
+    6  transition back   rotors take the weight back as the wing slows
+    7  VTOL descent      Leishman vortex-ring-state fit
+
+All of it at ground speed — airspeed less the headwind the m1 wind model
+gives along the route's true bearing — and all of it charged through the
+motor, ESC and battery losses, at the ratings the mass model bought.
+
+What this replaced: hover power for the whole VTOL time with no climb work
+(lifting the aircraft 100 m cost nothing beyond hovering); a climb from the
+pad that double-counted the VTOL leg; no descent (the 830 m drop to the
+Cumbaya pad was flown as level cruise); no transitions; no wind; cruise and
+climb drawn from the battery at SHAFT power with no motor loss; and fuel
+converted to shaft energy through a separately estimated efficiency rather
+than the architecture's own fuel flow.
 """
 
 from __future__ import annotations
 import numpy as np
 import openmdao.api as om
 
-from hpraptor.m5_propulsion.architecture_np import smooth_max
+from hpraptor.m5_propulsion.smooth import smooth_max, smooth_min
 from hpraptor.m5_propulsion import battery_catalogue as batcat
+from hpraptor.m5_propulsion import rotor_power as rp
+from hpraptor.m5_propulsion.technology import DEFAULT_TECHNOLOGY, PowertrainTechnology
+from hpraptor.m6_dynamics.eom_np import headwind
 
 G = 9.80665
 
+#: 5-point Gauss-Legendre rule on [0, 1], for the transition integrals.
+_GL_X = 0.5 * (1.0 + np.array([-0.9061798459386640, -0.5384693101056831, 0.0,
+                               0.5384693101056831, 0.9061798459386640]))
+_GL_W = 0.5 * np.array([0.2369268850561891, 0.4786286704993665, 0.5688888888888889,
+                        0.4786286704993665, 0.2369268850561891])
+
 
 class EnergyComp(om.ExplicitComponent):
-    """Battery and fuel sizing, and total mission energy."""
+    """The design mission, flown segment by segment, against the storage bought."""
 
     def initialize(self):
-        self.options.declare("cell", default=batcat.DEFAULT_CELL, types=str,
-                             desc="Catalogue key for the battery cell format")
-        self.options.declare("pack_overhead", default=batcat.DEFAULT_PACK_OVERHEAD,
-                             types=float)
-        self.options.declare("eta_motor", default=0.93, types=float)
-        # DEFAULT ONLY. The live value arrives on the `eta_fuel_cruise`
-        # input, blended per architecture by ArchitectureComp. This option
-        # is the value that input falls back to when EnergyComp is run
-        # standalone (as several unit tests do). It used to be the ONLY
-        # value: a flat 0.30 -- the series_parallel figure from
-        # core.initial_sizing -- applied to every architecture, which made
-        # the fuel-burning architectures differ in powerplant mass alone.
-        self.options.declare("eta_overall_cruise", default=0.30, types=float,
-                             desc="Fallback fuel-path efficiency when "
-                                  "eta_fuel_cruise is left unconnected")
-        self.options.declare("reserve_soc", default=0.15, types=float)
-        self.options.declare("fuel_reserve", default=0.10, types=float)
-        self.options.declare("t_vtol_total", default=95.0, types=float, desc="s")
-        self.options.declare("range_m", default=50000.0, types=float)
-        self.options.declare("h_origin_m", default=2900.0, types=float,
-                             desc="Departure pad elevation AMSL, from the DEM")
-        self.options.declare("eta_prop", default=0.75, types=float)
-        self.options.declare("fw_climb_angle_deg", default=8.0, types=float)
-        # Characteristic magnitudes for the smooth max/min blends. These MUST
-        # be constants, not derived from the current iterate: a data-dependent
-        # smoothing scale makes eps a function of the inputs, so complex step
-        # (which sees the scale frozen at its real part) and finite difference
-        # (which recomputes it) disagree on the derivative.
-        self.options.declare("mass_scale_kg", default=1.0, types=float)
+        o = self.options
+        o.declare("cell", default=batcat.DEFAULT_CELL, types=str,
+                  desc="Catalogue key for the battery cell format")
+        o.declare("pack_overhead", default=batcat.DEFAULT_PACK_OVERHEAD, types=float)
+        o.declare("technology", default=DEFAULT_TECHNOLOGY, types=PowertrainTechnology)
+        o.declare("reserve_soc", default=0.15, types=float)
+        o.declare("fuel_reserve", default=0.10, types=float)
+        o.declare("range_m", default=50000.0, types=float,
+                  desc="Ground distance origin -> destination for this mission")
+        o.declare("h_origin_m", default=2900.0, types=float,
+                  desc="Departure pad elevation AMSL, from the DEM")
+        o.declare("h_dest_m", default=2900.0, types=float,
+                  desc="Arrival pad elevation AMSL, from the DEM")
+        o.declare("h_ground_mean_m", default=2900.0, types=float,
+                  desc="Mean terrain under the route, for the cruise wind AGL")
+        o.declare("vtol_climb_m", default=100.0, types=float)
+        o.declare("vtol_descent_m", default=100.0, types=float)
+        o.declare("vtol_climb_rate", default=3.0, types=float, desc="m/s")
+        o.declare("vtol_descent_rate", default=2.5, types=float, desc="m/s")
+        o.declare("fw_climb_angle_deg", default=8.0, types=float)
+        o.declare("fw_descent_angle_deg", default=8.0, types=float)
+        o.declare("transition_accel", default=1.5, types=float,
+                  desc="Mean acceleration in the forward transition [m/s^2]")
+        o.declare("transition_decel", default=1.5, types=float,
+                  desc="Mean deceleration in the back transition [m/s^2]")
+        o.declare("eta_prop", default=0.75, types=float)
+        o.declare("kappa_i", default=1.15, types=float)
+        o.declare("sigma_rotor", default=0.07, types=float)
+        o.declare("C_d_blade", default=0.012, types=float)
+        o.declare("V_tip", default=120.0, types=float)
+        # Wind along the route (m1). Zero speed gives still air.
+        o.declare("wind_speed_ref", default=0.0, types=float)
+        o.declare("wind_from_deg", default=0.0, types=float)
+        o.declare("track_deg", default=0.0, types=float,
+                  desc="True bearing origin -> destination")
+        o.declare("wind_z0", default=0.1, types=float)
+        o.declare("wind_h_ref", default=10.0, types=float)
+        o.declare("wind_log_profile", default=True, types=bool)
+        # Constant smoothing scales (must not depend on the iterate, or
+        # complex step and finite differences disagree on the derivative).
+        o.declare("mass_scale_kg", default=1.0, types=float)
+        o.declare("fuel_ref_kg", default=0.1, types=float,
+                  desc="Normalisation of the fuel-balance constraint")
 
     def setup(self):
-        self.add_input("P_hover", val=3000.0, units="W")
-        self.add_input("P_cruise", val=450.0, units="W")
-        self.add_input("P_climb", val=1500.0, units="W")
-        self.add_input("L_D", val=17.0)
-        self.add_input("m_tow", val=20.0, units="kg")
-        self.add_input("fuel_lhv", val=43.0e6, units="J/kg")
-        self.add_input("V_cruise", val=30.0, units="m/s")
-        self.add_input("altitude", val=2900.0, units="m",
-                       desc="Cruise altitude AMSL (design variable)")
-        self.add_input("k_electric", val=0.5,
-                       desc="Commanded share of cruise power drawn from the battery")
-        self.add_input("fuel_capable", val=1.0,
-                       desc="Blended ability to burn fuel; 0 for all-electric")
-        self.add_input("eta_fuel_cruise", val=self.options["eta_overall_cruise"],
-                       desc="Fuel-path efficiency (shaft energy out per unit of "
-                            "fuel chemical energy) for the blended architecture, "
-                            "at the cruise operating point")
-        # Storage masses are DESIGN VARIABLES, not sizing formulas. Deriving
-        # them from the requirement made g3 satisfied by construction; as
-        # variables the optimizer must earn the reserve, and g3/g6 become
-        # constraints that genuinely bind.
-        self.add_input("m_battery", val=1.0, units="kg",
-                       desc="Battery pack mass (design variable)")
-        self.add_input("m_fuel", val=0.3, units="kg",
-                       desc="Usable fuel mass (design variable)")
+        a = self.add_input
+        a("m_tow", val=10.0, units="kg")
+        a("A_rotor", val=1.0, units="m**2")
+        a("S_ref", val=0.3, units="m**2")
+        a("AR", val=15.0)
+        a("e_oswald", val=0.8)
+        a("C_D0", val=0.025)
+        a("V_cruise", val=30.0, units="m/s")
+        a("altitude", val=3100.0, units="m", desc="Cruise altitude AMSL (design variable)")
+        a("P_cruise", val=200.0, units="W", desc="Cruise shaft power")
+        a("P_climb", val=700.0, units="W", desc="Wingborne climb shaft power")
+        a("P_lift_rated", val=1500.0, units="W")
+        a("P_cm_rated", val=800.0, units="W")
+        a("P_batt_cruise", val=230.0, units="W",
+          desc="Battery terminal power at cruise, from the architecture split")
+        a("fuel_flow_cruise", val=0.0, units="kg/s",
+          desc="Fuel flow at cruise, from the architecture split")
+        a("fuel_capable", val=1.0, desc="Blended ability to burn fuel; 0 for all-electric")
+        a("fuel_lhv", val=43.0e6, units="J/kg")
+        # Storage masses are DESIGN VARIABLES. The optimizer buys the energy
+        # and the reserve; g3/g6/g10 are what make it buy enough.
+        a("m_battery", val=1.0, units="kg", desc="Battery pack mass (design variable)")
+        a("m_fuel", val=0.3, units="kg", desc="Usable fuel mass (design variable)")
 
-        self.add_output("E_battery_wh", val=250.0, units="W*h")
-        self.add_output("E_fuel_wh", val=14000.0, units="W*h")
-        self.add_output("E_vtol_wh", val=80.0, units="W*h")
-        self.add_output("E_climb_wh", val=60.0, units="W*h")
-        self.add_output("E_cruise_wh", val=900.0, units="W*h")
-        self.add_output("t_climb_s", val=60.0, units="s")
-        self.add_output("k_effective", val=0.5,
-                        desc="Battery share actually used after architecture "
-                             "gating; forced to 1 where no fuel path exists")
-        self.add_output("energy_mission_wh", val=1000.0, units="W*h",
-                        desc="Shaft energy required by the design mission")
-        self.add_output("energy_available_wh", val=1000.0, units="W*h",
-                        desc="Usable shaft energy from the sized battery + fuel")
-        self.add_output("SOC_final", val=0.2,
-                        desc="Battery state of charge at mission end")
-        self.add_output("g2_energy_margin", val=0.0,
-                        desc="energy_mission/energy_available - 1; <= 0 means "
-                             "the vehicle can actually fly the mission")
-        self.add_output("g3_soc_margin", val=0.0,
-                        desc="reserve_soc - SOC_final; <= 0 means the battery "
-                             "still holds its reserve at touchdown")
-        self.add_output("g6_battery_power", val=0.0,
-                        desc="P_peak_elec/pack power limit - 1; <= 0 means the "
-                             "pack can actually deliver the hover peak at its "
-                             "cell C-rate")
-        self.add_output("P_battery_peak_w", val=3000.0, units="W",
-                        desc="Peak electrical draw the pack must sustain")
-        self.add_output("E_fuel_shaft_required_wh", val=0.0, units="W*h",
-                        desc="Shaft energy the fuel path must supply: the "
-                             "share of cruise the battery does not serve")
-        self.add_output("g10_fuel_energy", val=0.0,
-                        desc="(fuel shaft energy required - usable fuel "
-                             "on board) / mission energy; <= 0 means the "
-                             "fuel carried can actually supply its share")
-        self.add_output("m_fuel_carried", val=0.3, units="kg",
-                        desc="Fuel actually carried, after architecture gating")
-        self.add_output("E_battery_used_wh", val=200.0, units="W*h",
-                        desc="Electrical energy drawn from the pack over the mission")
+        o = self.add_output
+        o("E_battery_wh", val=100.0, units="W*h", desc="Installed pack energy")
+        o("E_fuel_wh", val=0.0, units="W*h", desc="Chemical energy of the fuel carried")
+        o("E_vtol_wh", val=20.0, units="W*h", desc="Shaft energy, both VTOL legs")
+        o("E_transition_wh", val=5.0, units="W*h", desc="Shaft energy, both transitions")
+        o("E_climb_wh", val=10.0, units="W*h", desc="Shaft energy, wingborne climb")
+        o("E_cruise_wh", val=20.0, units="W*h", desc="Shaft energy, cruise")
+        o("E_descent_wh", val=0.0, units="W*h", desc="Shaft energy, wingborne descent")
+        o("t_climb_s", val=60.0, units="s")
+        o("t_cruise_s", val=400.0, units="s")
+        o("t_mission_s", val=600.0, units="s")
+        o("d_cruise_m", val=10000.0, units="m", ref=1.0e4)
+        o("headwind_cruise", val=0.0, units="m/s")
+        o("k_effective", val=1.0,
+          desc="Battery share of the cruise drive demand actually delivered")
+        o("energy_mission_wh", val=60.0, units="W*h",
+          desc="Shaft energy the mission demands, all segments")
+        o("energy_available_wh", val=90.0, units="W*h",
+          desc="Usable battery energy above the reserve, at the terminals")
+        o("SOC_final", val=0.3, desc="Battery state of charge at touchdown")
+        o("P_battery_peak_w", val=1200.0, units="W",
+          desc="Largest terminal power the pack must sustain")
+        o("E_battery_used_wh", val=60.0, units="W*h",
+          desc="Chemical energy drawn from the pack (terminal energy / discharge eff.)")
+        o("E_battery_terminal_wh", val=58.0, units="W*h",
+          desc="Electrical energy delivered at the pack terminals")
+        o("m_fuel_carried", val=0.0, units="kg",
+          desc="Fuel actually carried, after architecture gating")
+        o("m_fuel_burned", val=0.0, units="kg", desc="Fuel burned on this mission")
+        o("E_fuel_burned_wh", val=0.0, units="W*h",
+          desc="Chemical energy of the fuel burned")
+        o("g2_energy_margin", val=-0.3,
+          desc="Diagnostic: E_used / E_usable - 1. Equivalent to g3, so not "
+               "declared as a constraint (two copies of one constraint break LICQ)")
+        o("g3_soc_margin", val=-0.2,
+          desc="reserve_soc - SOC_final; <= 0 keeps the reserve at touchdown")
+        o("g6_battery_power", val=0.0,
+          desc="P_peak / pack continuous limit - 1; <= 0 means the pack can "
+               "deliver the VTOL climb at its cell C-rate")
+        o("g10_fuel_energy", val=0.0,
+          desc="(fuel required incl. reserve - fuel carried) / fuel_ref; <= 0 "
+               "means the tank holds what the cruise burns")
 
         self.declare_partials("*", "*", method="cs")
 
+    # ── helpers ──────────────────────────────────────────────────────────
+
+    def _hw(self, agl):
+        o = self.options
+        if o["wind_speed_ref"] == 0.0:
+            return 0.0 * agl
+        return headwind(o["wind_speed_ref"], o["wind_from_deg"], o["track_deg"], agl,
+                        o["wind_z0"], o["wind_h_ref"], o["wind_log_profile"])
+
     def compute(self, inputs, outputs):
-        opt = self.options
-        P_hover = inputs["P_hover"][0]
-        P_cruise = inputs["P_cruise"][0]
-        P_climb = inputs["P_climb"][0]
-        L_D = inputs["L_D"][0]
-        m_tow = inputs["m_tow"][0]
-        LHV = inputs["fuel_lhv"][0]
-        V = inputs["V_cruise"][0]
-        h_cruise = inputs["altitude"][0]
-        fuel_capable = inputs["fuel_capable"][0]
+        o = self.options
+        t = o["technology"]
+        g = lambda k: inputs[k][0]
 
-        k_e = inputs["k_electric"][0]
-        R = opt["range_m"]
+        m = g("m_tow"); W = m * G
+        A = g("A_rotor"); S = g("S_ref"); AR = g("AR"); e = g("e_oswald")
+        CD0 = g("C_D0"); V = g("V_cruise"); h_cr = g("altitude")
+        P_lift_r = g("P_lift_rated"); P_cm_r = g("P_cm_rated")
+        eta_p = o["eta_prop"]; kap = o["kappa_i"]
 
-        # ── Architecture gating ──────────────────────────────────────────
-        # An architecture with no fuel converter cannot serve ANY of the
-        # cruise from fuel, whatever k_electric says. Without this the
-        # optimizer happily sized an all-electric aircraft that drew half
-        # its energy from gasoline it had no way to burn.
-        k_eff = 1.0 - fuel_capable * (1.0 - k_e)
+        def lift_bus(P):
+            return rp.drive_electrical_power(P, P_lift_r, t.motor_eta_max, t.motor_k_loss, t.esc_eta)
 
-        # ── Shaft energy the design mission demands ──────────────────────
-        E_vtol_wh = P_hover * opt["t_vtol_total"] / 3600.0
+        def cm_bus(P):
+            return rp.drive_electrical_power(P, P_cm_r, t.motor_eta_max, t.motor_k_loss, t.esc_eta)
 
-        # Climb from the departure pad to cruise altitude. This is what
-        # gives cruise altitude a cost, so the terrain-clearance constraint
-        # (g5) binds from below instead of the altitude floating free.
-        dh_climb = smooth_max(h_cruise - opt["h_origin_m"], 0.0,
-                              scale=opt["mass_scale_kg"] * 100.0)
-        roc = V * np.sin(np.radians(opt["fw_climb_angle_deg"]))
-        t_climb = dh_climb / roc
-        E_climb_wh = P_climb * t_climb / 3600.0
+        cell = batcat.get_cell(o["cell"])
+        m_batt = g("m_battery")
+        n_cells = batcat.pack_cell_count(m_batt, cell, o["pack_overhead"])
 
-        # Cruise covers the range less the ground distance used climbing.
-        d_climb = t_climb * V * np.cos(np.radians(opt["fw_climb_angle_deg"]))
-        d_cruise = smooth_max(R - d_climb, 0.05 * R, scale=100.0)
-        E_cruise_wh = P_cruise * (d_cruise / V) / 3600.0
+        def chem(P_bus):
+            """Chemical energy rate behind a terminal power."""
+            return P_bus / rp.battery_discharge_efficiency(
+                P_bus, n_cells, cell.voltage_nom_v, cell.r_internal_ohm)
 
-        energy_mission_wh = E_vtol_wh + E_climb_wh + E_cruise_wh
+        def prof(rho):
+            return rp.profile_power(rho, A, o["sigma_rotor"], o["C_d_blade"], o["V_tip"])
 
-        # ── Battery: all of VTOL and climb (powered lift and climb are
-        #    electric on every architecture here), plus k_eff of cruise.
-        E_batt_required_wh = E_vtol_wh + E_climb_wh + k_eff * E_cruise_wh
+        h_o, h_d = o["h_origin_m"], o["h_dest_m"]
+        dh_vc, dh_vd = o["vtol_climb_m"], o["vtol_descent_m"]
+        h_t1 = h_o + dh_vc                       # top of the VTOL climb
+        h_t2 = h_d + dh_vd                       # start of the VTOL descent
+        rho_cr = rp.isa_density_smooth(h_cr)
+        C_L_cr = W / (0.5 * rho_cr * V ** 2 * S)
+        k_ind = 1.0 / (np.pi * AR * e)
 
-        # Installed energy now follows from the MASS the optimizer chose and
-        # the cell format's pack-level specific energy, rather than being
-        # back-solved from the requirement. That inversion is what turns g3
-        # from an identity into a constraint.
-        cell = batcat.get_cell(opt["cell"])
-        m_battery = inputs["m_battery"][0]
-        m_fuel_dv = inputs["m_fuel"][0]
-        E_battery_wh = batcat.pack_energy_wh(m_battery, cell, opt["pack_overhead"])
+        # 1. VTOL climb ----------------------------------------------------
+        Vc = o["vtol_climb_rate"]
+        rho1 = rp.isa_density_smooth(h_o + 0.5 * dh_vc)
+        P_vc = rp.axial_climb_power(W, Vc, rho1, A, kap) + prof(rho1)
+        t_vc = dh_vc / Vc
+        bus_vc = lift_bus(P_vc)
 
-        # ── Fuel: only the share the architecture can actually burn.
-        #    Carried fuel is gated so a battery-only aircraft has no dead
-        #    fuel mass even if the optimizer leaves m_fuel non-zero.
-        # Per-architecture, from ArchitectureComp's own split physics.
-        eta = inputs["eta_fuel_cruise"][0]
-        m_fuel = fuel_capable * m_fuel_dv
+        # 7. VTOL descent --------------------------------------------------
+        Vd = o["vtol_descent_rate"]
+        rho7 = rp.isa_density_smooth(h_d + 0.5 * dh_vd)
+        P_vd = rp.axial_descent_power(W, Vd, rho7, A, kap) + prof(rho7)
+        t_vd = dh_vd / Vd
+        bus_vd = lift_bus(P_vd)
 
-        # ── Usable shaft energy actually on board ────────────────────────
-        E_fuel_wh = m_fuel * LHV / 3600.0
-        usable_batt = E_battery_wh * (1.0 - opt["reserve_soc"])
-        usable_fuel = E_fuel_wh * eta * (1.0 - opt["fuel_reserve"])
-        energy_available_wh = usable_batt + usable_fuel
+        # 2 & 6. Transitions — Gauss-Legendre over the speed ramp ------------
+        def transition(h_tr, accel, forward):
+            rho = rp.isa_density_smooth(h_tr)
+            dur = V / accel
+            Esh = 0.0; Ebus = 0.0; Echem = 0.0; Pmax = 0.0 * W
+            for x, wq in zip(_GL_X, _GL_W):
+                Vj = x * V
+                q = 0.5 * rho * Vj ** 2
+                L = q * S * C_L_cr
+                Tr = smooth_max(W - L, 0.0, scale=W)
+                Pr = (rp.edgewise_rotor_power(Tr, Vj, rho, A, kap)
+                      + prof(rho) * rp.rotor_running_gate(Tr, W))
+                D = q * S * (CD0 + k_ind * C_L_cr ** 2)
+                Tp = (m * accel + D) if forward else smooth_max(D - m * accel, 0.0, scale=W)
+                Pp = Tp * Vj / eta_p
+                bus = lift_bus(Pr) + cm_bus(Pp)
+                Esh = Esh + wq * (Pr + Pp) * dur
+                Ebus = Ebus + wq * bus * dur
+                Echem = Echem + wq * chem(bus) * dur
+                Pmax = smooth_max(Pmax, bus, scale=W)
+            hw = self._hw(h_tr - (h_o if forward else h_d))
+            dist = dur * (0.5 * V - hw)
+            return Esh, Ebus, Echem, dur, dist, Pmax
 
-        # ── State of charge at touchdown ─────────────────────────────────
-        SOC_final = 1.0 - E_batt_required_wh / E_battery_wh
+        E_tf_sh, E_tf_bus, E_tf_chem, t_tf, d_tf, Pmax_tf = transition(
+            h_t1, o["transition_accel"], True)
+        E_tb_sh, E_tb_bus, E_tb_chem, t_tb, d_tb, Pmax_tb = transition(
+            h_t2, o["transition_decel"], False)
 
-        # ── Can the pack physically deliver the hover peak? ───────────────
-        # A pack sized on energy alone can be incapable of the hover draw at
-        # its cells' C-rate. Energy-dense cylindricals in particular need
-        # several times the energy-sized mass just to sustain power.
-        P_peak_elec = P_hover / opt["eta_motor"]
-        P_pack_limit = batcat.pack_power_limit_w(m_battery, cell, opt["pack_overhead"])
+        # 3. Wingborne climb -----------------------------------------------
+        gam_c = np.radians(o["fw_climb_angle_deg"])
+        dh_c = smooth_max(h_cr - h_t1, 0.0, scale=o["mass_scale_kg"] * 100.0)
+        t_cl = dh_c / (V * np.sin(gam_c))
+        hw_cl = self._hw(0.5 * (h_t1 + h_cr) - h_o)
+        d_cl = t_cl * (V * np.cos(gam_c) - hw_cl)
+        P_cl = g("P_climb")
+        bus_cl = cm_bus(P_cl)
 
-        outputs["P_battery_peak_w"] = P_peak_elec
-        outputs["g6_battery_power"] = P_peak_elec / P_pack_limit - 1.0
-        outputs["m_fuel_carried"] = m_fuel
-        outputs["E_battery_used_wh"] = E_batt_required_wh
-        outputs["E_battery_wh"] = E_battery_wh
-        outputs["E_fuel_wh"] = E_fuel_wh
-        outputs["E_vtol_wh"] = E_vtol_wh
-        outputs["E_climb_wh"] = E_climb_wh
-        outputs["E_cruise_wh"] = E_cruise_wh
-        outputs["t_climb_s"] = t_climb
-        outputs["k_effective"] = k_eff
-        outputs["energy_mission_wh"] = energy_mission_wh
-        outputs["energy_available_wh"] = energy_available_wh
+        # 5. Wingborne descent ---------------------------------------------
+        gam_d = np.radians(o["fw_descent_angle_deg"])
+        dh_d = smooth_max(h_cr - h_t2, 0.0, scale=o["mass_scale_kg"] * 100.0)
+        t_de = dh_d / (V * np.sin(gam_d))
+        hw_de = self._hw(0.5 * (h_t2 + h_cr) - h_d)
+        d_de = t_de * (V * np.cos(gam_d) - hw_de)
+        P_cr = g("P_cruise")
+        # Thrust makes up only the drag that gravity does not; a steeper
+        # descent is held by a windmilling (not regenerating) propeller.
+        P_de = smooth_max(P_cr - W * V * np.sin(gam_d) / eta_p, 0.0, scale=P_cr)
+        bus_de = cm_bus(P_de)
+
+        # 4. Cruise ---------------------------------------------------------
+        R = o["range_m"]
+        d_cr = smooth_max(R - d_tf - d_cl - d_de - d_tb, 0.05 * R, scale=100.0)
+        hw_cr = self._hw(h_cr - o["h_ground_mean_m"])
+        t_cr = d_cr / (V - hw_cr)
+        P_bc = g("P_batt_cruise")
+        bus_cr_total = cm_bus(P_cr)
+
+        # ── Battery energy, at the terminals and chemically ───────────────
+        E_term_J = (bus_vc * t_vc + E_tf_bus + bus_cl * t_cl + P_bc * t_cr
+                    + bus_de * t_de + E_tb_bus + bus_vd * t_vd)
+        E_chem_J = (chem(bus_vc) * t_vc + E_tf_chem + chem(bus_cl) * t_cl
+                    + chem(P_bc) * t_cr + chem(bus_de) * t_de + E_tb_chem
+                    + chem(bus_vd) * t_vd)
+        E_used_wh = E_chem_J / 3600.0
+        E_batt_wh = batcat.pack_energy_wh(m_batt, cell, o["pack_overhead"])
+        SOC_final = 1.0 - E_used_wh / E_batt_wh
+
+        # ── Fuel ─────────────────────────────────────────────────────────
+        fuel_capable = g("fuel_capable")
+        m_fuel = fuel_capable * g("m_fuel")
+        m_burn = g("fuel_flow_cruise") * t_cr
+        m_req = m_burn / (1.0 - o["fuel_reserve"])
+        LHV = g("fuel_lhv")
+
+        # ── Pack power ───────────────────────────────────────────────────
+        P_peak = smooth_max(smooth_max(bus_vc, bus_vd, scale=W),
+                            smooth_max(Pmax_tf, Pmax_tb, scale=W), scale=W)
+        P_limit = batcat.pack_power_limit_w(m_batt, cell, o["pack_overhead"])
+
+        # ── Shaft energy by segment ──────────────────────────────────────
+        E_vtol = (P_vc * t_vc + P_vd * t_vd) / 3600.0
+        E_tr = (E_tf_sh + E_tb_sh) / 3600.0
+        E_cl = P_cl * t_cl / 3600.0
+        E_crs = P_cr * t_cr / 3600.0
+        E_des = P_de * t_de / 3600.0
+
+        outputs["E_battery_wh"] = E_batt_wh
+        outputs["E_fuel_wh"] = m_fuel * LHV / 3600.0
+        outputs["E_vtol_wh"] = E_vtol
+        outputs["E_transition_wh"] = E_tr
+        outputs["E_climb_wh"] = E_cl
+        outputs["E_cruise_wh"] = E_crs
+        outputs["E_descent_wh"] = E_des
+        outputs["t_climb_s"] = t_cl
+        outputs["t_cruise_s"] = t_cr
+        outputs["t_mission_s"] = t_vc + t_tf + t_cl + t_cr + t_de + t_tb + t_vd
+        outputs["d_cruise_m"] = d_cr
+        outputs["headwind_cruise"] = hw_cr
+        outputs["k_effective"] = P_bc / bus_cr_total
+        outputs["energy_mission_wh"] = E_vtol + E_tr + E_cl + E_crs + E_des
+        outputs["energy_available_wh"] = E_batt_wh * (1.0 - o["reserve_soc"])
         outputs["SOC_final"] = SOC_final
-        # ── Energy balance, per pool ─────────────────────────────────────
-        # These used to be one constraint on the TOTAL:
-        #     g2 = energy_mission_wh / energy_available_wh - 1
-        # which let one pool cover the other's demand. Two ways that is
-        # wrong. Fuel could pay for VTOL and climb, which are electric on
-        # every architecture here. And nothing required the fuel actually
-        # carried to cover the share of cruise the battery does not serve --
-        # so the optimizer drove m_fuel to zero, satisfied the total from
-        # the battery, and was charged in the objective only for
-        # E_battery_used_wh. The (1 - k_eff) share of cruise was supplied by
-        # nothing and cost nothing, which is why every fuel-burning
-        # architecture beat all-electric on primary energy while reporting
-        # m_fuel_carried = 0.
-        E_fuel_shaft_required_wh = (1.0 - k_eff) * E_cruise_wh
-
-        outputs["E_fuel_shaft_required_wh"] = E_fuel_shaft_required_wh
-        outputs["g2_energy_margin"] = E_batt_required_wh / usable_batt - 1.0
-
-        # Written as a scaled difference rather than a ratio on purpose: an
-        # architecture with no fuel converter has usable_fuel == 0 and
-        # required == 0, and 0/0 is NaN, which would poison the Jacobian.
-        outputs["g10_fuel_energy"] = (
-            (E_fuel_shaft_required_wh - usable_fuel) / energy_mission_wh)
-        outputs["g3_soc_margin"] = opt["reserve_soc"] - SOC_final
+        outputs["P_battery_peak_w"] = P_peak
+        outputs["E_battery_used_wh"] = E_used_wh
+        outputs["E_battery_terminal_wh"] = E_term_J / 3600.0
+        outputs["m_fuel_carried"] = m_fuel
+        outputs["m_fuel_burned"] = m_burn
+        outputs["E_fuel_burned_wh"] = m_burn * LHV / 3600.0
+        outputs["g2_energy_margin"] = E_used_wh / (E_batt_wh * (1.0 - o["reserve_soc"])) - 1.0
+        outputs["g3_soc_margin"] = o["reserve_soc"] - SOC_final
+        outputs["g6_battery_power"] = P_peak / P_limit - 1.0
+        # A scaled difference, not a ratio: an architecture with no fuel path
+        # has required == carried == 0, and 0/0 would poison the Jacobian.
+        outputs["g10_fuel_energy"] = (m_req - m_fuel) / o["fuel_ref_kg"]
 
 
 class WeightsComp(om.ExplicitComponent):
@@ -252,16 +363,14 @@ class WeightsComp(om.ExplicitComponent):
     def setup(self):
         self.add_input("m_empty", val=8.0, units="kg",
                        desc="Airframe empty mass (from StructuresComp)")
-        self.add_input("m_propulsion", val=2.5, units="kg")
+        self.add_input("m_propulsion", val=2.5, units="kg",
+                       desc="Motors, ESCs, converters and fuel system")
         self.add_input("m_battery", val=1.5, units="kg")
         self.add_input("m_fuel", val=1.2, units="kg")
         self.add_input("m_rotor_group", val=0.3, units="kg")
 
-        # A lower bound is what gives BoundsEnforceLS something to enforce.
-        # Without it a Newton step can drive MTOW negative, and the geometry
-        # model then takes the square root of a negative area and fills the
-        # whole Jacobian with NaN — which is exactly how the coupled solve
-        # failed before this bound existed. MTOW cannot be below the payload.
+        # A lower bound gives BoundsEnforceLS something to enforce: MTOW
+        # cannot fall below the payload.
         self.add_output("m_tow", val=20.0, units="kg", desc="Closed MTOW",
                         lower=self.options["payload_kg"] + 0.5)
 
@@ -278,70 +387,61 @@ class ObjectiveComp(om.ExplicitComponent):
     """
     Scalarized objective, with a choice of what "cost" means.
 
-    Comparing architectures on SHAFT energy is not neutral. A hybrid pays
-    its conversion losses inside the number (fuel -> shaft at ~30%), while a
-    battery aircraft's stored energy is already electrical, so it does not.
-    Ranking on shaft Wh therefore flatters the battery path for reasons that
-    have nothing to do with the design.
+    ``primary_energy`` (default) — energy drawn from OUTSIDE the aircraft to
+    fly the corridor mission: the chemical energy taken from the pack
+    divided by the charging efficiency, plus the chemical energy of the fuel
+    BURNED. Every architecture is charged for its own losses at the same
+    boundary. (The fuel term used to be the fuel CARRIED, which charged a
+    tank sized for the design-range mission against a corridor that burns a
+    fraction of it.)
 
-    Three metrics are offered, and the default is the fair one:
+    ``energy_mass`` — battery + fuel + powerplant mass.
 
-    ``primary_energy``  (default)
-        Energy drawn from OUTSIDE the aircraft to fly the mission: battery
-        energy divided by charging efficiency, plus the fuel's full chemical
-        energy. Every architecture is charged for its own losses at the same
-        boundary, which is what makes the comparison like-for-like.
+    ``shaft_energy`` — the shaft energy the mission demands; for
+    single-architecture studies only, since it hides conversion losses.
 
-    ``energy_mass``
-        Mass of the energy system (battery + fuel + powerplant). For an
-        aircraft this is often the decision that matters more than energy,
-        and it is completely architecture-neutral.
-
-    ``shaft_energy``
-        The previous behaviour, kept so earlier results stay reproducible.
-        Use it for single-architecture studies, not for ranking.
+    The discreteness penalty is MULTIPLICATIVE: cost * (1 + mu * sum
+    w_i(1-w_i)). An absolute penalty (the old lambda = 200 Wh) is 3.5x the
+    objective at 13 km and 4 % of it at 600 km, so its strength depended on
+    the mission rather than on the relaxation. A relative one does not.
     """
 
     METRICS = ("primary_energy", "energy_mass", "shaft_energy")
 
     def initialize(self):
-        self.options.declare("penalty_scale", default=200.0, types=float,
-                             desc="lambda, in objective units per unit of sum w_i(1-w_i)")
-        self.options.declare("metric", default="primary_energy", values=("primary_energy", "energy_mass", "shaft_energy"),
+        self.options.declare("penalty_scale", default=1.0, types=float,
+                             desc="mu, the relative weight of sum w_i(1-w_i)")
+        self.options.declare("metric", default="primary_energy",
+                             values=("primary_energy", "energy_mass", "shaft_energy"),
                              desc="Which cost the optimizer minimises")
         self.options.declare("eta_charging", default=0.90, types=float,
                              desc="Grid-to-battery charging efficiency")
 
     def setup(self):
-        self.add_input("energy_mission_wh", val=1000.0, units="W*h",
+        self.add_input("energy_mission_wh", val=60.0, units="W*h",
                        desc="Shaft energy the mission demands")
-        self.add_input("E_battery_used_wh", val=200.0, units="W*h",
-                       desc="Electrical energy drawn from the pack")
-        self.add_input("m_fuel_carried", val=0.3, units="kg")
+        self.add_input("E_battery_used_wh", val=60.0, units="W*h",
+                       desc="Chemical energy drawn from the pack")
+        self.add_input("m_fuel_burned", val=0.0, units="kg")
+        self.add_input("m_fuel_carried", val=0.0, units="kg")
         self.add_input("fuel_lhv", val=43.0e6, units="J/kg")
         self.add_input("m_battery", val=1.0, units="kg")
-        self.add_input("m_propulsion", val=2.5, units="kg")
+        self.add_input("m_propulsion", val=1.0, units="kg")
         self.add_input("penalty_discreteness", val=0.8)
 
-        self.add_output("energy_primary_wh", val=1000.0, units="W*h",
+        self.add_output("energy_primary_wh", val=70.0, units="W*h",
                         desc="Energy drawn from outside the aircraft")
-        self.add_output("energy_system_mass", val=3.0, units="kg",
+        self.add_output("energy_system_mass", val=2.0, units="kg",
                         desc="Battery + fuel + powerplant mass")
-        self.add_output("objective", val=1000.0)
+        self.add_output("objective", val=70.0)
         self.declare_partials("*", "*", method="cs")
 
     def compute(self, inputs, outputs):
         opt = self.options
-
-        # Primary energy: charge the battery path for charging losses, and
-        # the fuel path for its full chemical content. Same boundary for
-        # both, which is the whole point.
-        e_batt_primary = inputs["E_battery_used_wh"][0] / opt["eta_charging"]
-        e_fuel_primary = inputs["m_fuel_carried"][0] * inputs["fuel_lhv"][0] / 3600.0
-        energy_primary = e_batt_primary + e_fuel_primary
-
-        energy_system_mass = (inputs["m_battery"][0]
-                              + inputs["m_fuel_carried"][0]
+        e_batt = inputs["E_battery_used_wh"][0] / opt["eta_charging"]
+        e_fuel = inputs["m_fuel_burned"][0] * inputs["fuel_lhv"][0] / 3600.0
+        energy_primary = e_batt + e_fuel
+        energy_system_mass = (inputs["m_battery"][0] + inputs["m_fuel_carried"][0]
                               + inputs["m_propulsion"][0])
 
         outputs["energy_primary_wh"] = energy_primary
@@ -354,8 +454,8 @@ class ObjectiveComp(om.ExplicitComponent):
             cost = energy_system_mass
         else:
             cost = inputs["energy_mission_wh"][0]
-
-        outputs["objective"] = cost + opt["penalty_scale"] * inputs["penalty_discreteness"][0]
+        outputs["objective"] = cost * (1.0 + opt["penalty_scale"]
+                                       * inputs["penalty_discreteness"][0])
 
 
 class TerrainClearanceComp(om.ExplicitComponent):
@@ -408,29 +508,28 @@ class RotorFitComp(om.ExplicitComponent):
     """
     Geometric admissibility: the rotors have to fit on the airframe.
 
-    Disk loading was pinned at its LOWER bound in every run, because hover
-    power falls as the disk grows and nothing in the model stopped the disk
-    from growing. The real limit is not a number typed into the bounds, it
-    is that four rotors of diameter D must physically fit around a wing of
-    a given span without overlapping each other or the fuselage.
+    Uses the quadplane H layout every consumer shares
+    (``m2_geometry.rotor.boom_layout``): booms at the innermost station
+    where the discs clear the fuselage, y_b = (D(1+c) + d_fus)/2, and the
+    outboard rotor tip inside the wing tip, y_b + D/2 <= b/2. The previous
+    constraint assumed two rotors side by side on each semi-span (2.2 D <=
+    b), a layout the 3D model did not draw and no quadplane uses.
 
     Modelling it as a constraint rather than a bound means the limit moves
-    correctly when the wing does, instead of being a constant the optimizer
-    silently leans on.
+    with the wing instead of being a constant the optimizer leans on.
     """
 
     def initialize(self):
-        self.options.declare("n_rotors", default=4, types=int)
         self.options.declare("clearance_frac", default=0.10, types=float,
                              desc="Tip-to-tip gap as a fraction of diameter")
 
     def setup(self):
         self.add_input("rotor_diameter", val=0.45, units="m")
         self.add_input("span", val=2.5, units="m")
-        self.add_input("fuse_length", val=1.2, units="m")
+        self.add_input("fuse_diameter", val=0.16, units="m")
 
         self.add_output("rotor_span_required", val=2.0, units="m",
-                        desc="Lateral extent the rotor array needs")
+                        desc="Span the rotor array needs, tip to tip")
         self.add_output("g7_rotor_fit", val=0.0,
                         desc="rotor_span_required/span - 1; <= 0 means the "
                              "rotors fit within the wingspan")
@@ -439,56 +538,40 @@ class RotorFitComp(om.ExplicitComponent):
 
     def compute(self, inputs, outputs):
         D = inputs["rotor_diameter"][0]
-        span = inputs["span"][0]
-        pitch = D * (1.0 + self.options["clearance_frac"])
-
-        # A quad carries two rotors per side; they must sit within the
-        # semi-span without their tips meeting at the centreline.
-        per_side = self.options["n_rotors"] / 2.0
-        required = per_side * pitch
-
+        y_b = 0.5 * (D * (1.0 + self.options["clearance_frac"]) + inputs["fuse_diameter"][0])
+        required = 2.0 * (y_b + 0.5 * D)
         outputs["rotor_span_required"] = required
-        outputs["g7_rotor_fit"] = required / span - 1.0
+        outputs["g7_rotor_fit"] = required / inputs["span"][0] - 1.0
 
 
 class AdmissibilityComp(om.ExplicitComponent):
     """
     Limits that come from the models being valid, not from taste.
 
-    Two bounds kept binding at the optimum because the physics that should
-    have stopped them was missing:
+    Chord Reynolds number: below ~2e5 a small-UAV wing runs laminar
+    separation bubbles that a turbulent flat-plate skin-friction buildup
+    does not model, so C_D0 becomes optimistic exactly where the optimizer
+    wants to go. Constraining Re keeps the answer inside the region where
+    the drag polar being optimised against is credible — it is what caps
+    aspect ratio.
 
-    **Aspect ratio** ran to whatever ceiling it was given. Spar stress did
-    not stop it (the spar sits on its manufacturing thickness floor), so
-    nothing did. The real limit is chord Reynolds number: at AR 22 on a
-    1.9 m span the chord is 86 mm, and at that scale the drag polar this
-    model uses — built from turbulent flat-plate skin friction — no longer
-    describes the flow. Constraining Re keeps the design inside the region
-    where the aerodynamics it is being optimised against are meaningful.
-
-    **Disk loading** ran to its floor because a bigger rotor always lowered
-    hover power and nothing charged for it. Rotor mass is handled in
-    RotorGroupMassComp; this component covers the Reynolds side.
+    Kinematic viscosity is now the ISA/Sutherland value the drag buildup
+    itself uses. It used to be nu_sl * rho_sl / rho (viscosity held at its
+    sea-level value), which overstates nu by ~6 % at 3100 m — on an active
+    constraint, that is a 6 % error in the chord the design is allowed.
     """
 
     def initialize(self):
-        # 2e5, not 1e5. Below roughly this figure a small-UAV wing runs
-        # laminar separation bubbles that a turbulent flat-plate skin-friction
-        # buildup does not model, so C_D0 becomes optimistic exactly where the
-        # optimizer wants to go. Constraining Re keeps the answer inside the
-        # region where the drag polar being optimised against is credible.
         self.options.declare("Re_min", default=2.0e5, types=float,
                              desc="Lowest chord Reynolds number the drag "
                                   "polar is trusted at")
-        self.options.declare("nu_sea_level", default=1.46e-5, types=float,
-                             desc="Kinematic viscosity at sea level [m^2/s]")
 
     def setup(self):
         self.add_input("chord_mean", val=0.25, units="m")
         self.add_input("V_cruise", val=30.0, units="m/s")
         self.add_input("altitude", val=3000.0, units="m")
 
-        self.add_output("Re_cruise", val=5.0e5,
+        self.add_output("Re_cruise", val=5.0e5, ref=1.0e5,
                         desc="Chord Reynolds number at the cruise condition")
         self.add_output("g8_reynolds", val=0.0,
                         desc="1 - Re_cruise/Re_min; <= 0 keeps the design "
@@ -497,12 +580,10 @@ class AdmissibilityComp(om.ExplicitComponent):
         self.declare_partials("*", "*", method="cs")
 
     def compute(self, inputs, outputs):
-        from hpraptor.core.atmosphere import isa_density
+        from hpraptor.core.atmosphere import isa_density, isa_viscosity
 
-        rho = isa_density(inputs["altitude"][0])
-        # Kinematic viscosity scales roughly with 1/rho at constant
-        # temperature; adequate for a validity check, and smooth.
-        nu = self.options["nu_sea_level"] * 1.225 / rho
+        alt = inputs["altitude"][0]
+        nu = isa_viscosity(alt) / isa_density(alt)
         Re = inputs["V_cruise"][0] * inputs["chord_mean"][0] / nu
 
         outputs["Re_cruise"] = Re

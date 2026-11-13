@@ -76,19 +76,21 @@ except ImportError:  # pragma: no cover
 if HAS_OPENMDAO:
     from .components import (
         GeometryComp, StructuresComp, AeroComp,
-        PowerRequiredComp, ArchitectureComp,
+        PowerRequiredComp, ArchitectureComp, CruiseSplitComp,
         EnergyComp, WeightsComp, ObjectiveComp,
     )
     from .groups import HybridVTOLGroup
-    from .problem import build_problem, run_optimization, ARCH_NAMES
+    from .problem import (build_problem, run_optimization, run_multistart,
+                          collect_result, pinned_z, ARCH_NAMES)
 
     __all__ = [
         "HAS_OPENMDAO",
         "GeometryComp", "StructuresComp", "AeroComp",
-        "PowerRequiredComp", "ArchitectureComp",
+        "PowerRequiredComp", "ArchitectureComp", "CruiseSplitComp",
         "EnergyComp", "WeightsComp", "ObjectiveComp",
         "HybridVTOLGroup",
-        "build_problem", "run_optimization", "ARCH_NAMES",
+        "build_problem", "run_optimization", "run_multistart",
+        "collect_result", "pinned_z", "ARCH_NAMES",
     ]
 else:  # pragma: no cover
     __all__ = ["HAS_OPENMDAO"]

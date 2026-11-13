@@ -3,7 +3,7 @@
 from .geometry import GeometryComp
 from .structures import StructuresComp
 from .aero import AeroComp
-from .propulsion import PowerRequiredComp, ArchitectureComp
+from .propulsion import PowerRequiredComp, ArchitectureComp, CruiseSplitComp
 from .aerosandbox import (
     ASBGeometryComp, ASBAeroComp,
     aerosandbox_aero_available, aerosandbox_aero_reason,
@@ -23,6 +23,7 @@ __all__ = [
     "AeroComp",           # m4_aero
     "PowerRequiredComp",  # m5_propulsion (power required)
     "ArchitectureComp",   # m5_propulsion (continuous architecture relaxation)
+    "CruiseSplitComp",    # m5_propulsion (battery/fuel split at a mission point)
     "EnergyComp",         # battery/fuel sizing + mission energy
     "TerrainClearanceComp",  # m1 terrain -> cruise-altitude constraint
     "RotorFitComp",       # geometric admissibility of the rotor array

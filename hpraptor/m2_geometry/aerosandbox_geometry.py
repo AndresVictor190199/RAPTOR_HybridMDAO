@@ -131,45 +131,40 @@ def _build_fuselage(fuselage: FuselageGeometry) -> asb.Fuselage:
 
 
 def _build_propulsors(rotor: RotorGeometry, x_position: float, span_extent: float,
-                      clearance_frac: float = 0.10) -> List[asb.Propulsor]:
+                      clearance_frac: float = 0.10, chord_root: float = 0.0,
+                      fuse_diameter: float = 0.0) -> List[asb.Propulsor]:
     """
     Place the lift rotors in the layout the sizing constraint assumes.
 
-    Not aerodynamically coupled to the VLM solve -- these are geometry only.
-    But "geometry only" is not the same as "arbitrary": ``RotorFitComp`` (g7)
-    sizes the rotors against a **quad** layout, two per side on fore-and-aft
-    booms, and derives its lateral requirement as two rotor pitches across
-    the full span. A drawing that contradicts that is worse than no drawing,
-    because it is the picture a reader uses to judge whether the rotors fit.
+    Not aerodynamically coupled to the solvers -- geometry only, but not
+    arbitrary: this is ``m2_geometry.rotor.boom_layout``, the same H layout
+    ``RotorFitComp`` (g7) constrains and the drag and mass buildups use. Two
+    booms at y_b, each carrying one rotor ahead of the wing and one behind
+    it, with the fore and aft discs clear of the wing chord.
 
-    This previously spread all n rotors along a single spanwise line
-    (``np.linspace(-span_extent, span_extent, n)``), which at the converged
-    design put four 0.663 m rotors on a 0.481 m pitch -- overlapping by
-    0.18 m, and violating the very constraint the optimizer reported as
-    satisfied at -0.39. The layout below is the one g7 actually models.
-
-    ``clearance_frac`` mirrors ``RotorFitComp``'s option of the same name, so
-    the fore-and-aft spacing is the same tip gap the constraint enforces
-    laterally.
+    The previous layout put the fore and aft rotors one pitch apart centred
+    on the wing leading edge, so both discs overlapped the wing in plan view
+    and their downwash was blocked by it. ``span_extent`` is kept only for
+    callers that pass it; the boom station now follows from the rotor and
+    fuselage size.
     """
+    from hpraptor.m2_geometry.rotor import boom_layout
+
     n = max(rotor.n_rotors, 1)
-    pitch = rotor.diameter_m * (1.0 + clearance_frac)
+    lay = boom_layout(rotor.diameter_m, 2.0 * span_extent, chord_root,
+                      fuse_diameter, 10.0, clearance_frac=clearance_frac)
+    x_mid = x_position + 0.5 * chord_root
+    dx = 0.5 * lay.boom_length_m
 
     if n == 1:
-        stations = [(x_position, 0.0)]
+        stations = [(x_mid, 0.0)]
     else:
-        # Split as evenly as possible between a port and a starboard boom,
-        # then distribute each boom's share longitudinally about the wing.
         per_side = n // 2
-        offsets = (np.linspace(-(per_side - 1) / 2.0, (per_side - 1) / 2.0,
-                               per_side) * pitch if per_side > 1
-                   else np.array([0.0]))
-        stations = [(x_position + float(dx), sign * span_extent)
-                    for sign in (-1.0, 1.0) for dx in offsets]
-        # An odd rotor count leaves one over; put it on the centreline aft,
-        # clear of the booms.
+        offsets = (np.linspace(-dx, dx, per_side) if per_side > 1 else np.array([0.0]))
+        stations = [(x_mid + float(o), sign * lay.y_boom_m)
+                    for sign in (-1.0, 1.0) for o in offsets]
         if n % 2:
-            stations.append((x_position + pitch, 0.0))
+            stations.append((x_mid + dx + rotor.diameter_m, 0.0))
 
     return [
         asb.Propulsor(
@@ -210,7 +205,9 @@ def build_airplane(
     h_tail = _build_horizontal_tail(tail, x_position=x_tail)
     v_tail = _build_vertical_tail(tail, x_position=x_tail)
     fuse = _build_fuselage(fuselage)
-    propulsors = _build_propulsors(rotor, x_position=x_wing, span_extent=0.6 * wing.span / 2.0)
+    propulsors = _build_propulsors(rotor, x_position=x_wing, span_extent=0.5 * wing.span,
+                                   chord_root=wing.chord_root,
+                                   fuse_diameter=fuselage.diameter_m)
 
     return asb.Airplane(
         name="HybridVTOL",

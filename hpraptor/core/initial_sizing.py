@@ -428,7 +428,7 @@ def compute_initial_sizing(
     rho = isa_density(altitude)
     V_cruise = req.cruise_speed_ms
     # Use design range or actual route range, whichever is larger
-    design_range_m = getattr(req, "design_range_km", 50.0) * 1000.0
+    design_range_m = (getattr(req, "design_range_km", None) or 0.0) * 1000.0
     range_m = max(design_range_m, mission.range_m)
 
     log["mean_ground_altitude_m"] = mission.mean_altitude

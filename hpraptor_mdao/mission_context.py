@@ -32,9 +32,17 @@ from hpraptor.core.mission_loader import MissionDefinition
 
 @dataclass
 class TerrainContext:
-    """Terrain-derived quantities the sizing problem needs from m1."""
+    """
+    Everything the sizing problem needs from m1: the corridor measured on
+    the DEM, plus the mission requirements from the YAML that act on it.
 
-    range_m: float                 # ground distance origin -> destination
+    Every field is consumed. The previous version carried range, pads,
+    ridge and VTOL time only; the wind, the route's bearing, the reserves,
+    the climb rates and angles and the design range were in the YAML and
+    read by nothing in the MDO.
+    """
+
+    range_m: float                 # ground distance origin -> destination (DEM)
     h_origin_m: float              # pad elevation AMSL
     h_dest_m: float
     h_terrain_max_m: float         # highest terrain on the direct route
@@ -44,6 +52,23 @@ class TerrainContext:
     vtol_descent_m: float          # vertical travel at the arrival pad
     t_vtol_total_s: float          # total time in powered-lift flight
     dem_source: str                # provenance, so results stay traceable
+    h_terrain_mean_m: float = 2900.0   # mean terrain under the route (wind AGL)
+    track_deg: float = 0.0             # great-circle bearing origin -> destination
+    vtol_climb_rate_ms: float = 3.0
+    vtol_descent_rate_ms: float = 2.5
+    fw_climb_angle_deg: float = 8.0
+    fw_descent_angle_deg: float = 8.0
+    wind_speed_ref: float = 0.0
+    wind_from_deg: float = 0.0
+    wind_z0: float = 0.1
+    wind_h_ref: float = 10.0
+    wind_log_profile: bool = True
+    reserve_soc: float = 0.15
+    fuel_reserve: float = 0.10
+    #: Capability mission: the vehicle must also be able to fly this ground
+    #: distance (same pads and terrain, cruise stretched). 0 = none, which is
+    #: also what a design range at or below the corridor's length means.
+    design_range_m: float = 0.0
 
     @property
     def h_cruise_min_m(self) -> float:
@@ -55,23 +80,58 @@ class TerrainContext:
         """
         return self.h_terrain_max_m + self.clearance_cruise_m
 
+    @property
+    def h_hover_m(self) -> float:
+        """Highest hover altitude: the top of the VTOL climb at the higher pad."""
+        return max(self.h_origin_m + self.vtol_climb_m, self.h_dest_m + self.vtol_descent_m)
+
+    @property
+    def has_design_point(self) -> bool:
+        return self.design_range_m > self.range_m
+
+    def mission_options(self, range_m: Optional[float] = None) -> Dict:
+        """The EnergyComp options this context fixes."""
+        return dict(
+            range_m=float(self.range_m if range_m is None else range_m),
+            h_origin_m=self.h_origin_m, h_dest_m=self.h_dest_m,
+            h_ground_mean_m=self.h_terrain_mean_m,
+            vtol_climb_m=self.vtol_climb_m, vtol_descent_m=self.vtol_descent_m,
+            vtol_climb_rate=self.vtol_climb_rate_ms,
+            vtol_descent_rate=self.vtol_descent_rate_ms,
+            fw_climb_angle_deg=self.fw_climb_angle_deg,
+            fw_descent_angle_deg=self.fw_descent_angle_deg,
+            wind_speed_ref=self.wind_speed_ref, wind_from_deg=self.wind_from_deg,
+            track_deg=self.track_deg, wind_z0=self.wind_z0,
+            wind_h_ref=self.wind_h_ref, wind_log_profile=bool(self.wind_log_profile),
+            reserve_soc=self.reserve_soc, fuel_reserve=self.fuel_reserve,
+        )
+
     def to_dict(self) -> Dict[str, float]:
         d = asdict(self)
         d["h_cruise_min_m"] = self.h_cruise_min_m
         return d
 
     def summary(self) -> str:
-        return "\n".join([
+        lines = [
             f"  Terrain context (DEM source: {self.dem_source})",
-            f"    range                {self.range_m / 1000:8.2f} km",
+            f"    range                {self.range_m / 1000:8.2f} km   "
+            f"(bearing {self.track_deg:5.1f} deg true)",
             f"    origin pad           {self.h_origin_m:8.1f} m AMSL",
             f"    destination pad      {self.h_dest_m:8.1f} m AMSL",
-            f"    highest terrain      {self.h_terrain_max_m:8.1f} m AMSL",
+            f"    highest terrain      {self.h_terrain_max_m:8.1f} m AMSL"
+            f"   (route mean {self.h_terrain_mean_m:.0f})",
             f"    cruise clearance     {self.clearance_cruise_m:8.1f} m AGL",
             f"    -> min cruise alt    {self.h_cruise_min_m:8.1f} m AMSL",
             f"    VTOL climb/descent   {self.vtol_climb_m:8.1f} / "
             f"{self.vtol_descent_m:.1f} m  ({self.t_vtol_total_s:.0f} s)",
-        ])
+            f"    wind                 {self.wind_speed_ref:8.1f} m/s from "
+            f"{self.wind_from_deg:.0f} deg at {self.wind_h_ref:.0f} m AGL",
+            f"    reserves             SOC {self.reserve_soc:.2f}, fuel {self.fuel_reserve:.2f}",
+        ]
+        if self.has_design_point:
+            lines.append(f"    design range         {self.design_range_m / 1000:8.2f} km "
+                         f"(capability mission)")
+        return "\n".join(lines)
 
 
 def build_terrain_context(
@@ -86,15 +146,15 @@ def build_terrain_context(
     Derive the terrain context for a mission, building its DEM if needed.
 
     Pad elevations come from the DEM rather than the YAML's declared
-    values, for the same reason run_mission anchors them: clearance checks
-    and pad altitudes must reference one consistent terrain model.
+    values, so clearance checks and pad altitudes reference one consistent
+    terrain model.
     """
     from hpraptor.m1_mission.dem import DEMInterface
 
     if dem_path is None:
-        from run_mission import _resolve_dem_path
-        dem_path = _resolve_dem_path(mission, dem_source=dem_source,
-                                     dem_resolution=dem_resolution)
+        from hpraptor.m1_mission.dem_resolve import resolve_dem_path
+        dem_path = resolve_dem_path(mission, dem_source=dem_source,
+                                    dem_resolution=dem_resolution)
     if dem_path is None:
         raise RuntimeError(
             "No DEM available for this mission, so terrain clearance cannot be "
@@ -113,29 +173,45 @@ def build_terrain_context(
 
     req = mission.requirements
     cons = mission.constraints
+    wind = mission.wind
 
     # VTOL legs: climb high enough at the pad that the wingborne transition
-    # STARTS with clearance margin in hand. Climbing only to the transition's
-    # AGL floor leaves exactly zero margin at the first node, so any terrain
-    # rise under the transition violates immediately and the trajectory is
-    # infeasible from its own initial guess. Using the cruise clearance here
-    # gives the transition twice its floor to work with.
+    # STARTS with clearance margin in hand.
     vtol_climb = float(cons.min_cruise_terrain_clearance)
     vtol_descent = float(cons.min_cruise_terrain_clearance)
     t_vtol = (vtol_climb / max(req.vtol_climb_rate_ms, 0.1)
               + vtol_descent / max(req.vtol_descent_rate_ms, 0.1))
 
+    elev = np.asarray(profile["elevations"], dtype=float)
+    design_range_m = (req.design_range_km or 0.0) * 1000.0
+    descent = (req.fw_descent_angle_deg if req.fw_descent_angle_deg is not None
+               else req.fw_climb_angle_deg)
+
     ctx = TerrainContext(
         range_m=float(profile["total_distance"]),
         h_origin_m=h_origin,
         h_dest_m=h_dest,
-        h_terrain_max_m=float(np.nanmax(profile["elevations"])),
+        h_terrain_max_m=float(np.nanmax(elev)),
         clearance_cruise_m=float(cons.min_cruise_terrain_clearance),
         clearance_min_m=float(cons.min_terrain_clearance),
         vtol_climb_m=vtol_climb,
         vtol_descent_m=vtol_descent,
         t_vtol_total_s=float(t_vtol),
         dem_source=str(dem.metadata.source),
+        h_terrain_mean_m=float(np.nanmean(elev)),
+        track_deg=float(mission.bearing_deg),
+        vtol_climb_rate_ms=float(req.vtol_climb_rate_ms),
+        vtol_descent_rate_ms=float(req.vtol_descent_rate_ms),
+        fw_climb_angle_deg=float(req.fw_climb_angle_deg),
+        fw_descent_angle_deg=float(descent),
+        wind_speed_ref=float(wind.headwind_speed),
+        wind_from_deg=float(wind.wind_direction_deg),
+        wind_z0=float(wind.z_0),
+        wind_h_ref=float(wind.h_ref),
+        wind_log_profile=bool(wind.use_log_profile),
+        reserve_soc=float(cons.min_battery_soc),
+        fuel_reserve=float(cons.min_fuel_reserve),
+        design_range_m=float(design_range_m),
     )
 
     if verbose:

@@ -1,97 +1,89 @@
 """
-Continuous Architecture Relaxation — NumPy / Complex-Step-Safe Twin
-======================================================================
+Continuous Architecture Relaxation — NumPy / Complex-Step-Safe Physics
+=========================================================================
 
-A numpy re-implementation of `architecture_index.casadi_arch_power_split`
-and its blending, written so it stays exact under COMPLEX-STEP
-differentiation (OpenMDAO's `declare_partials(method='cs')`).
+The power-split physics of the six propulsion architectures, written so it
+stays exact under COMPLEX-STEP differentiation (OpenMDAO's
+``declare_partials(method='cs')``), and the softmax blending that turns the
+discrete architecture choice into a continuous design variable.
 
-Why this exists
----------------
-`architecture_index.py` carries two implementations of the same physics:
+This is the single implementation the sizing MDO (``ArchitectureComp``,
+``CruiseSplitComp``) and the dymos trajectory ODEs share. The CasADi twin in
+``architecture_index.casadi_arch_power_split`` mirrors it for the parity
+tests; when the two disagree the tests fail.
 
-  * the numpy path (`PropulsionSystem.compute_power_split`) — real
-    branchy code with `if` / `np.clip`, not differentiable;
-  * the CasADi path (`casadi_arch_power_split`) — smoothed and
-    differentiable, but only usable inside a CasADi graph.
+What changed, and why
+---------------------
+**Ratings are arguments.** Every part-load efficiency — motor, engine
+Willans line, turbine SFC lapse, fuel-cell polarization — is evaluated
+against the rating of the component the mass model actually bought. They
+used to be evaluated against ratings frozen at a 20 kg first guess (a 6 kW
+motor flying a 200 W cruise at 3 % load), which made every fuel-path
+efficiency the model reported a property of that mismatch instead of the
+architecture. Pass ``ratings=None`` to fall back to the base manager's
+component values, which is what the parity tests do.
 
-OpenMDAO needs the *smoothed* physics (so gradients exist) expressed in
-*numpy* (so complex-step works). That is this module. It is a direct
-transliteration of the CasADi branch, not a third model:
+**One motor per drivetrain.** Series, turbo-electric and fuel-cell aircraft
+drive the propulsor through ONE motor fed from a shared bus. The old code
+evaluated that motor twice, at the battery share and at the fuel share
+separately, as if there were two half-loaded motors — double-counting the
+part-load penalty — and then drew the motor loss on the fuel share from the
+battery. The bus demand is now formed once and split between battery and
+converter.
 
-    ca.sqrt/exp/tanh  ->  np.sqrt/exp/tanh   (all complex-safe)
-    ca.if_else(c,a,b) ->  np.where(c, a, b)  with c evaluated on .real
+**A saturated converter does not create energy.** Where the fuel path is
+asked for more than it can deliver at altitude, the shortfall is drawn from
+the battery. It used to be silently unserved: the engine was clamped at its
+limit while the shaft received the full demand anyway.
+
+**Series-parallel is its own architecture.** It shared parallel's power
+split and series' component list, so its results duplicated series to every
+printed digit. It is now a power-split hybrid: a fraction
+``sp_mech_fraction`` of engine output drives the propeller mechanically and
+the rest goes through the generator to the bus.
+
+**A lift-rotor demand can ride on the same bus.** ``P_lift`` (shaft power
+of the lift rotors, through their own motors and rating) is added to the bus
+demand. Electric drivetrains can serve it from the converter; parallel and
+series-parallel, whose engine is geared to the cruise propeller, cannot.
 
 COMPLEX-STEP RULE
 -----------------
-Under complex step the perturbation lives in the imaginary part, so any
-comparison must be taken on the REAL part only. Comparing complex
-numbers directly either raises or silently branches on the perturbation,
-destroying the derivative. Every branch below uses `_re()`.
+Any comparison is taken on the real part only (``_re``). Returned values are
+never truncated to it.
 
 Author: Victor Berrazueta (LUAS-EPN)
 """
 
 from __future__ import annotations
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
 from hpraptor.m5_propulsion.architecture_index import ContinuousArchitectureManager
 from hpraptor.m5_propulsion import fuel_cell_polarization as fc_polarization
+from hpraptor.m5_propulsion.smooth import (  # re-exported for existing imports
+    _re, _smoothing_eps, smooth_max, smooth_min, smooth_switch,
+)
+from hpraptor.m5_propulsion.technology import DEFAULT_TECHNOLOGY, PowertrainTechnology
+from hpraptor.m5_propulsion import rotor_power as rp
+
+__all__ = [
+    "smooth_max", "smooth_min", "smooth_switch", "softmax_weights",
+    "discreteness_penalty", "NumpyArchitectureManager", "FC_RATED_CURRENT_DENSITY",
+]
+
+#: Current density at which a stack is "rated" [A/cm^2]. The polarization
+#: model has no mass-transport term, so its power curve need not peak inside
+#: i_max; rating at a fixed current density instead of at a fraction of the
+#: peak keeps the rated point where real air-cooled stacks put it (~0.65-0.7
+#: V/cell, ~50 % system efficiency).
+FC_RATED_CURRENT_DENSITY = 0.8
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COMPLEX-STEP-SAFE PRIMITIVES
+# BLENDING PRIMITIVES
 # ═══════════════════════════════════════════════════════════════════════════
-
-def _re(x: Any) -> Any:
-    """Real part, for use in comparisons only (never in returned values)."""
-    return np.real(x)
-
-
-def _smoothing_eps(scale: float) -> float:
-    """
-    Smoothing epsilon sized to the operands' magnitude.
-
-    Mirrors architecture_index._smoothing_eps — see that docstring for why
-    an absolute epsilon is a units bug waiting to happen.
-    """
-    return (1e-3 * scale) ** 2
-
-
-def smooth_max(a: Any, b: Any, scale: float = 1.0, eps: float = None) -> Any:
-    """Twice-differentiable max(a, b); complex-step safe."""
-    if eps is None:
-        eps = _smoothing_eps(scale)
-    return 0.5 * (a + b + np.sqrt((a - b) ** 2 + eps))
-
-
-def smooth_min(a: Any, b: Any, scale: float = 1.0, eps: float = None) -> Any:
-    """Twice-differentiable min(a, b); complex-step safe."""
-    if eps is None:
-        eps = _smoothing_eps(scale)
-    return 0.5 * (a + b - np.sqrt((a - b) ** 2 + eps))
-
-
-def smooth_switch(P: Any, width: float = 10.0, cap: float = 30.0) -> Any:
-    """
-    Smooth 0->1 gate, tanh(P / width), used to drive fuel consumption to
-    zero as fuel-path demand vanishes.
-
-    The argument is clamped to +/-`cap` before the tanh. In REAL
-    arithmetic `np.tanh(400)` is simply 1.0, but under COMPLEX STEP the
-    same call is evaluated via sinh/cosh and overflows for arguments
-    beyond ~350, emitting warnings and risking inf/inf -> NaN in the
-    derivative. tanh is saturated to within 2e-26 by |arg| = 30, so the
-    clamp is numerically free, and the derivative it discards (~1e-26) is
-    zero to machine precision anyway.
-    """
-    arg = P / width
-    arg = np.where(_re(arg) > cap, cap + 0.0 * arg, arg)
-    arg = np.where(_re(arg) < -cap, -cap + 0.0 * arg, arg)
-    return np.tanh(arg)
-
 
 def softmax_weights(z_vec: np.ndarray, temp: float = 1.5) -> np.ndarray:
     """
@@ -110,11 +102,21 @@ def discreteness_penalty(weights: np.ndarray) -> Any:
     Projection penalty sum_i w_i*(1 - w_i).
 
     Zero exactly when the weights are one-hot (a buildable, committed
-    architecture) and maximal when they are spread evenly. Added to the
-    objective, this is what pulls the relaxed solution back to a discrete
-    choice while staying differentiable.
+    architecture) and maximal (5/6) when they are spread evenly.
     """
     return np.sum(weights * (1.0 - weights))
+
+
+def _clamp01(k: Any) -> Any:
+    """
+    Power split clamped to [0, 1] inside the physics.
+
+    A collocation optimizer enforces control bounds only at its nodes, so a
+    split can overshoot between them; k > 1 would make the fuel share
+    negative and let the vehicle gain mass. The smoothing scale is small
+    (offset ~5e-6) so a commanded k = 1 leaves no phantom idle fuel flow.
+    """
+    return smooth_min(smooth_max(k, 0.0, scale=0.01), 1.0, scale=0.01)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -123,276 +125,285 @@ def discreteness_penalty(weights: np.ndarray) -> Any:
 
 class NumpyArchitectureManager:
     """
-    Complex-step-safe twin of ContinuousArchitectureManager's CasADi path.
+    Complex-step-safe power-split physics for the six architectures.
 
-    Deliberately borrows the component parameter objects (motor, ICE,
-    generator, fuel cell, turbine) from an existing
-    ContinuousArchitectureManager rather than rebuilding them, so the two
-    implementations cannot drift apart in their inputs — any parity
-    failure is then a real formulation difference, not a setup mismatch.
+    Borrows the component TECHNOLOGY objects (efficiency maps, Willans
+    slope, polarization curve) from a ContinuousArchitectureManager. The
+    component RATINGS come from the caller through ``ratings``; the base
+    manager's ratings are only a fallback.
     """
 
     ARCH_NAMES = ContinuousArchitectureManager.ARCH_NAMES
 
-    #: Lower heating value of the fuel each architecture carries [J/kg],
-    #: in ARCH_NAMES order. Index 5 (fuel cell) is hydrogen; the rest are
-    #: hydrocarbon. all_electric carries no fuel, but its entry must stay
-    #: finite so it cannot put a 0/0 into a blended denominator.
+    #: Lower heating value [J/kg] per architecture, ARCH_NAMES order. Index 5
+    #: (fuel cell) burns hydrogen. all_electric carries no fuel, but its entry
+    #: stays finite so it cannot put a 0/0 into a blended denominator.
     FUEL_LHV = np.array([43.0e6, 43.0e6, 43.0e6, 43.0e6, 43.0e6, 120.0e6])
 
-    def __init__(self, base_manager: ContinuousArchitectureManager):
+    def __init__(self, base_manager: ContinuousArchitectureManager,
+                 technology: Optional[PowertrainTechnology] = None):
         self.base = base_manager
         self.prop_systems = base_manager.prop_systems
+        self.tech = (technology or getattr(base_manager, "technology", None)
+                     or DEFAULT_TECHNOLOGY)
+        t = self.tech
+        self.FUEL_LHV = np.array([t.lhv_hydrocarbon_j_kg] * 5 + [t.lhv_h2_j_kg])
 
-    # ── Motor ────────────────────────────────────────────────────────────
+        fc = self.prop_systems["fuel_cell"].fuel_cell
+        # Net power of the reference stack at its rated current density; a
+        # stack rated r_fc delivers demand P at the efficiency the reference
+        # stack has at P * P_ref / r_fc (net power scales with active area).
+        self._fc_P_ref = float(np.real(
+            fc_polarization.net_power(fc, FC_RATED_CURRENT_DENSITY)))
 
-    def _motor_electrical_power(self, arch: str, P_mech: Any) -> Any:
-        """Electrical power drawn to deliver P_mech at the shaft."""
+    # ── Ratings ──────────────────────────────────────────────────────────
+
+    def default_ratings(self, arch: str) -> Dict[str, Any]:
+        """The base manager's own component ratings (legacy behaviour)."""
+        ps = self.prop_systems[arch]
+        conv = None
+        if arch in ("series", "parallel", "series_parallel"):
+            conv = ps.ice.P_max_sl
+        elif arch == "turbo_electric":
+            conv = ps.gas_turbine.P_max_sl
+        return {"motor": ps.motor.P_max, "lift": ps.motor.P_max, "conv": conv}
+
+    def _resolve(self, arch: str, ratings: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        r = self.default_ratings(arch)
+        scaled = False
+        if ratings is not None:
+            for key in ("motor", "lift", "conv"):
+                if ratings.get(key) is not None:
+                    r[key] = ratings[key]
+            scaled = ratings.get("conv") is not None
+        r["_scaled"] = scaled
+        return r
+
+    # ── Electric drive ───────────────────────────────────────────────────
+
+    def _motor_electrical_power(self, arch: str, P_mech: Any,
+                                P_rated: Any = None) -> Any:
+        """Bus power to deliver P_mech through motor + ESC [W]."""
         motor = self.prop_systems[arch].motor
-
-        P_safe = P_mech + 1e-10
-        load_frac = smooth_min(smooth_max(P_safe / motor.P_max, 0.01), 1.5)
-
-        eta = motor.eta_max * (1.0 - motor.k_loss * (1.0 - load_frac) ** 2)
-        eta = np.where(_re(load_frac) < 0.1, eta * load_frac / 0.1, eta)
-        eta = np.where(
-            _re(load_frac) > 1.0,
-            eta * smooth_max(0.5, 1.0 - 0.3 * (load_frac - 1.0)),
-            eta,
-        )
-        eta = smooth_min(smooth_max(eta, 0.05), motor.eta_max)
-        return P_safe / eta
+        P_rated = motor.P_max if P_rated is None else P_rated
+        return rp.drive_electrical_power(P_mech, P_rated, motor.eta_max,
+                                         motor.k_loss, self.tech.esc_eta)
 
     # ── Atmosphere (inlined, differentiable) ─────────────────────────────
 
     @staticmethod
     def _density(altitude_m: Any) -> Any:
-        """
-        ISA density, smoothed floor on temperature. Inlined rather than
-        calling core.atmosphere.isa_density because that function branches
-        on the tropopause; this mirrors the CasADi path exactly.
-        """
-        T_raw = 288.15 - 0.0065 * altitude_m
-        T_loc = smooth_max(T_raw, 200.0, scale=288.15)
-        return 1.225 * (T_loc / 288.15) ** 4.255877
+        """ISA density with a smoothed temperature floor."""
+        return rp.isa_density_smooth(altitude_m)
+
+    def _ice_available(self, arch: str, r_conv: Any, altitude_m: Any) -> Any:
+        ice = self.prop_systems[arch].ice
+        sigma = self._density(altitude_m) / 1.225
+        return r_conv * sigma ** ice.altitude_derating_exp
+
+    @staticmethod
+    def _gt_available(r_conv: Any, altitude_m: Any) -> Any:
+        T_loc = smooth_max(288.15 - 0.0065 * altitude_m, 200.0, scale=288.15)
+        rho = 1.225 * (T_loc / 288.15) ** 4.255877
+        return r_conv * (rho / 1.225) * smooth_min((288.15 / T_loc) ** 0.5, 1.1)
+
+    def _willans(self, arch: str, P_shaft: Any, r_conv: Any) -> Any:
+        """Engine fuel flow [kg/s], Willans line on the engine's own rating."""
+        ice = self.prop_systems[arch].ice
+        b = ice.BSFC_rated / 3.6e9                      # g/kWh -> kg/J
+        a = ice.idle_fuel_frac * b * r_conv
+        return a + b * P_shaft
 
     # ── Per-architecture power split ─────────────────────────────────────
 
     def arch_power_split(self, arch: str, P_demand: Any, k_electric: Any,
-                         altitude_m: Any) -> Dict[str, Any]:
+                         altitude_m: Any, ratings: Optional[Dict[str, Any]] = None,
+                         P_lift: Any = 0.0) -> Dict[str, Any]:
         """
-        Power split for ONE architecture. Transliteration of
-        ContinuousArchitectureManager.casadi_arch_power_split.
+        Power split for ONE architecture.
+
+        Parameters
+        ----------
+        P_demand : shaft power at the cruise propulsor [W]
+        k_electric : battery share of the bus (electric drivetrains) or of
+            the shaft (parallel / series-parallel)
+        altitude_m : altitude for converter derating
+        ratings : {'motor', 'lift', 'conv'} — cruise-motor shaft rating,
+            lift-motor shaft rating, converter rating (sea-level shaft W for
+            engines and turbines, net electrical W for a fuel cell)
+        P_lift : lift-rotor shaft power on the same bus [W]
+
+        Returns ``P_elec_from_bus`` (battery draw at the terminals),
+        ``fuel_flow_kg_s``, ``heat_total``, ``P_conv_out`` (power the fuel
+        converter delivered) and ``P_bus_motor`` (total drive demand).
         """
         ps = self.prop_systems[arch]
+        t = self.tech
+        r = self._resolve(arch, ratings)
+        k = _clamp01(k_electric)
+        zero = 0.0 * P_demand + 0.0 * k
 
-        # Clamp the power split to [0, 1] HERE rather than trusting the
-        # caller's bounds. A collocation-based optimizer enforces control
-        # bounds only at the discretization nodes, so k_electric can
-        # overshoot between them; k > 1 makes P_fuel_mech negative, which
-        # flips the sign of the fuel-flow gate and lets the vehicle GAIN
-        # mass and RECHARGE its battery from nothing. Guarding it in the
-        # physics closes that off for every caller and discretization.
-        k_clamped = smooth_min(smooth_max(k_electric, 0.0), 1.0)
-
-        P_elec_mech = P_demand * k_clamped
-        P_fuel_mech = P_demand * (1.0 - k_clamped)
-
-        P_elec_bus = self._motor_electrical_power(arch, P_elec_mech)
-        heat_motor = P_elec_bus - P_elec_mech
-
-        fuel_flow = 0.0 * P_demand   # keeps shape/dtype under complex step
-        heat_fuel = 0.0 * P_demand
-
-        # Gate fuel consumption smoothly to zero as fuel-path demand -> 0.
-        switch = smooth_switch(P_fuel_mech)
+        P_lift = P_lift + zero
+        bus_lift = self._motor_electrical_power(arch, P_lift, r["lift"])
+        fuel_flow = zero
+        P_conv_out = zero
+        conv_loss = zero
 
         if arch == "all_electric":
-            # No fuel path exists here, so the battery must carry the ENTIRE
-            # shaft demand regardless of what k_electric says. Splitting the
-            # demand and then leaving the fuel share unserved (the original
-            # behaviour) let (1-k)*P_demand be delivered from nowhere — an
-            # energy-conservation hole the optimizer will happily exploit by
-            # driving k_electric down.
-            P_elec_bus = self._motor_electrical_power(arch, P_demand)
-            heat_motor = P_elec_bus - P_demand
+            # No fuel converter: the battery carries the whole demand,
+            # whatever k says.
+            P_bus = self._motor_electrical_power(arch, P_demand, r["motor"]) + bus_lift
+            P_batt = P_bus
+            P_motor_shaft = P_demand + P_lift
 
-        elif arch == "series":
-            ice, gen = ps.ice, ps.generator
-            eta_gen = gen.eta_rated if gen else 0.90
-            P_gen_shaft = P_fuel_mech / eta_gen
+        elif arch in ("series", "turbo_electric", "fuel_cell"):
+            P_bus = self._motor_electrical_power(arch, P_demand, r["motor"]) + bus_lift
+            want = (1.0 - k) * P_bus
+            switch = smooth_switch(want)
+            r_c = r["conv"]
 
-            rho = self._density(altitude_m)
-            P_max_ice = ice.P_max_sl * (rho / 1.225) ** ice.altitude_derating_exp
-            P_actual = smooth_min(
-                smooth_max(P_gen_shaft, 0.0, scale=ice.P_max_sl),
-                P_max_ice, scale=ice.P_max_sl,
-            )
+            if arch == "series":
+                eta_gen = ps.generator.eta_rated if ps.generator else t.gen_eta
+                avail = eta_gen * self._ice_available(arch, r_c, altitude_m)
+                P_gen = smooth_min(want, avail, scale=r_c)
+                P_engine = P_gen / eta_gen
+                fuel_flow = switch * self._willans(arch, P_engine, r_c)
+                lhv = ps.ice.fuel_lhv
 
-            # Willans line; no floor (the max() guard can never bind — see
-            # architecture_index.py's series branch).
-            fuel_flow = switch * (ice._a + ice._b * P_actual)
-            P_gen_elec = P_fuel_mech
-            fuel_elec = switch * (
-                self._motor_electrical_power(arch, P_fuel_mech) - P_gen_elec
-            )
-            P_elec_bus = P_elec_bus + fuel_elec
-            heat_fuel = switch * (
-                P_gen_shaft - P_gen_elec + (fuel_flow * ice.fuel_lhv - P_gen_shaft)
-            )
+            elif arch == "turbo_electric":
+                gt = ps.gas_turbine
+                eta_gen = ps.generator.eta_rated if ps.generator else t.gen_eta
+                P_av = self._gt_available(r_c, altitude_m)
+                P_gen = smooth_min(want, eta_gen * P_av, scale=r_c)
+                P_engine = P_gen / eta_gen
+                x = smooth_min(smooth_max(P_engine / (P_av + 1e-10), 0.05), 1.0)
+                sfc_d = gt.SFC_design
+                if r["_scaled"]:
+                    # Scale effect: small turboshafts burn more per kWh.
+                    sfc_d = t.gt_sfc_ref_g_kwh * (t.gt_P_ref_w / r_c) ** t.gt_sfc_scale_exp
+                sfc = sfc_d * (gt.sfc_c0 + gt.sfc_c1 * x + gt.sfc_c2 * x ** 2) / x
+                fuel_flow = switch * sfc * P_engine / 3.6e9
+                lhv = gt.fuel_lhv
 
-        elif arch in ("parallel", "series_parallel"):
-            ice = ps.ice
-            rho = self._density(altitude_m)
-            P_max_ice = ice.P_max_sl * (rho / 1.225) ** ice.altitude_derating_exp
-            P_actual = smooth_min(
-                smooth_max(P_fuel_mech, 0.0, scale=ice.P_max_sl),
-                P_max_ice, scale=ice.P_max_sl,
-            )
-            fuel_flow = switch * (ice._a + ice._b * P_actual)
-            heat_fuel = switch * (fuel_flow * ice.fuel_lhv - P_fuel_mech)
+            else:  # fuel_cell
+                fc = ps.fuel_cell
+                if r["_scaled"]:
+                    P_gen = smooth_min(want, r_c, scale=r_c)
+                    P_eff = P_gen * (self._fc_P_ref / r_c)
+                else:
+                    # Legacy: demand applied to the reference stack directly.
+                    P_gen = want
+                    P_eff = P_gen
+                eta_fc = fc_polarization.system_efficiency(fc, P_eff)
+                fuel_flow = switch * P_gen / (eta_fc * fc.h2_lhv)
+                P_engine = P_gen
+                lhv = fc.h2_lhv
 
-        elif arch == "turbo_electric":
-            gt, gen = ps.gas_turbine, ps.generator
-            eta_gen = gen.eta_rated if gen else 0.92
-            P_gen_shaft = P_fuel_mech / eta_gen
+            P_conv_out = P_gen
+            P_batt = P_bus - P_gen
+            conv_loss = fuel_flow * lhv - P_gen
+            P_motor_shaft = P_demand + P_lift
 
-            T_raw = 288.15 - 0.0065 * altitude_m
-            T_loc = smooth_max(T_raw, 200.0, scale=288.15)
-            rho = 1.225 * (T_loc / 288.15) ** 4.255877
-            P_max_gt = gt.P_max_sl * (rho / 1.225) * smooth_min((288.15 / T_loc) ** 0.5, 1.1)
+        elif arch == "parallel":
+            r_c = r["conv"]
+            want = (1.0 - k) * P_demand
+            P_engine = smooth_min(want, self._ice_available(arch, r_c, altitude_m),
+                                  scale=r_c)
+            fuel_flow = smooth_switch(want) * self._willans(arch, P_engine, r_c)
+            P_bus = self._motor_electrical_power(arch, P_demand - P_engine, r["motor"]) + bus_lift
+            P_batt = P_bus
+            P_conv_out = P_engine
+            conv_loss = fuel_flow * ps.ice.fuel_lhv - P_engine
+            P_motor_shaft = P_demand - P_engine + P_lift
 
-            x_ratio = smooth_min(smooth_max(P_gen_shaft / (P_max_gt + 1e-10), 0.05), 1.0)
-            # Part-load lapse: /x_ratio. See GasTurbineParams' SFC note --
-            # without it the bracket rises with load and the turbine is most
-            # efficient at idle, which is backwards.
-            sfc = gt.SFC_design * (
-                gt.sfc_c0 + gt.sfc_c1 * x_ratio + gt.sfc_c2 * x_ratio ** 2
-            ) / x_ratio
-            fuel_flow = switch * (sfc * (P_gen_shaft / 1e3) / (1e3 * 3600))
-
-            P_gen_elec = P_fuel_mech
-            fuel_elec = switch * (
-                self._motor_electrical_power(arch, P_fuel_mech) - P_gen_elec
-            )
-            P_elec_bus = P_elec_bus + fuel_elec
-            heat_fuel = switch * (
-                P_gen_shaft - P_gen_elec + (fuel_flow * gt.fuel_lhv - P_gen_shaft)
-            )
-
-        elif arch == "fuel_cell":
-            fc = ps.fuel_cell
-            # Real polarization physics, load-dependent and differentiable
-            # (see m5_propulsion.fuel_cell_polarization). This replaces the
-            # flat eta_fc = 0.55 both differentiable paths used to carry,
-            # which overstated efficiency by 11% at light load and 155% near
-            # the stack's limit.
-            P_fc_elec = self._motor_electrical_power(arch, P_fuel_mech)
-            eta_fc = fc_polarization.system_efficiency(fc, P_fc_elec)
-            fuel_flow = switch * P_fc_elec / (eta_fc * fc.h2_lhv)
-            heat_fuel = switch * P_fc_elec * (1.0 / eta_fc - 1.0)
+        elif arch == "series_parallel":
+            r_c = r["conv"]
+            s = t.sp_mech_fraction
+            eta_gen = ps.generator.eta_rated if ps.generator else t.gen_eta
+            eta_ref = ps.motor.eta_max * t.esc_eta
+            # Engine output that delivers the fuel share (1-k) of the shaft
+            # demand through the mechanical path (s) and the electrical one
+            # (1-s, via generator, bus and motor at nominal efficiency).
+            want = (1.0 - k) * P_demand / (s + (1.0 - s) * eta_gen * eta_ref)
+            P_engine = smooth_min(want, self._ice_available(arch, r_c, altitude_m),
+                                  scale=r_c)
+            fuel_flow = smooth_switch(want) * self._willans(arch, P_engine, r_c)
+            P_direct = s * P_engine
+            P_gen = (1.0 - s) * eta_gen * P_engine
+            P_bus = self._motor_electrical_power(arch, P_demand - P_direct, r["motor"]) + bus_lift
+            # Generator output beyond what the motor draws is throttled back,
+            # not stored: regeneration into the pack is not modelled.
+            P_batt = smooth_max(P_bus - P_gen, 0.0, scale=r["motor"])
+            P_conv_out = P_engine
+            conv_loss = fuel_flow * ps.ice.fuel_lhv - P_direct - P_gen
+            P_motor_shaft = P_demand - P_direct + P_lift
 
         else:
             raise ValueError(f"Unknown architecture: {arch!r}")
 
+        heat_drive = P_bus - P_motor_shaft
         return {
-            "P_elec_from_bus": P_elec_bus,
+            "P_elec_from_bus": P_batt,
             "fuel_flow_kg_s": fuel_flow,
-            "heat_total": heat_motor + heat_fuel,
+            "heat_total": heat_drive + conv_loss,
+            "P_conv_out": P_conv_out,
+            "P_bus_motor": P_bus,
         }
 
     # ── Blending across architectures ────────────────────────────────────
 
     def blend_power_split(self, weights: np.ndarray, P_demand: Any,
-                          k_electric: Any, altitude_m: Any) -> Dict[str, Any]:
-        """Evaluate all 6 architectures and blend the outputs by `weights`."""
-        results = [self.arch_power_split(a, P_demand, k_electric, altitude_m)
-                   for a in self.ARCH_NAMES]
-
-        bus = sum(w * r["P_elec_from_bus"] for w, r in zip(weights, results))
-        flow = sum(w * r["fuel_flow_kg_s"] for w, r in zip(weights, results))
-        heat = sum(w * r["heat_total"] for w, r in zip(weights, results))
-
-        return {
-            "P_demand": P_demand,
-            "P_elec_from_bus": bus,
-            "fuel_flow_kg_s": flow,
-            "heat_total": heat,
-        }
+                          k_electric: Any, altitude_m: Any,
+                          ratings: Optional[Sequence[Optional[Dict[str, Any]]]] = None,
+                          P_lift: Any = 0.0) -> Dict[str, Any]:
+        """Evaluate all six architectures and blend the outputs by ``weights``."""
+        ratings = ratings or [None] * len(self.ARCH_NAMES)
+        results = [self.arch_power_split(a, P_demand, k_electric, altitude_m,
+                                         ratings=ratings[i], P_lift=P_lift)
+                   for i, a in enumerate(self.ARCH_NAMES)]
+        out = {"P_demand": P_demand}
+        for key in ("P_elec_from_bus", "fuel_flow_kg_s", "heat_total", "P_conv_out"):
+            out[key] = sum(w * res[key] for w, res in zip(weights, results))
+        return out
 
     def arch_fuel_efficiency(self, arch: str, P_shaft_ref: Any, altitude_m: Any,
-                             eta_fallback: float = 0.30) -> Any:
+                             eta_fallback: float = 0.30,
+                             ratings: Optional[Dict[str, Any]] = None) -> Any:
         """
-        Shaft energy delivered per unit of fuel CHEMICAL energy, for ONE
-        architecture, at the reference shaft power `P_shaft_ref` [W].
+        Shaft energy per unit of fuel chemical energy, fuel path alone
+        (k = 0), at the reference shaft power [-].
 
-        This is the quantity the sizing model needs to turn a tank of fuel
-        into usable shaft Wh, and it is evaluated the only way that makes
-        it a property of the ARCHITECTURE rather than of the current
-        power-split command: with ``k_electric = 0``, so the fuel path is
-        asked to carry the whole reference demand.
-
-        It is deliberately the same physics `arch_power_split` already
-        runs -- the Willans line, the turbine's part-load lapse, the fuel
-        cell's polarization curve -- rather than a second correlation that
-        could drift from it.
-
-        Caveat, unchanged from the rest of the model: on the architectures
-        with a generator the motor loss on the fuel-supplied shaft power is
-        topped up from the bus, so a little of that shaft energy is
-        battery-borne. That top-up is not charged against the fuel here.
-
-        `all_electric` has no fuel converter, so its efficiency is
-        undefined; `eta_fallback` stands in for it. Nothing rides on the
-        value -- EnergyComp gates fuel mass to zero through `fuel_capable`
-        for that architecture -- but it must be finite and it must not be
-        zero, or the relaxation would be charged twice for the same gate.
+        Now a DIAGNOSTIC. The sizing model no longer converts a tank into
+        shaft energy through this number; it integrates the architecture's
+        own fuel flow over the mission. Where the converter saturates the
+        battery tops up the shortfall, so this then overstates the fuel
+        path; the ratings rule keeps cruise below saturation.
         """
         if arch == "all_electric":
-            # 0.0 * P keeps the dtype complex under complex step.
             return eta_fallback + 0.0 * P_shaft_ref
-
-        split = self.arch_power_split(arch, P_shaft_ref, 0.0, altitude_m)
-        P_fuel_chem = split["fuel_flow_kg_s"] * self.FUEL_LHV[self.ARCH_NAMES.index(arch)]
-        return P_shaft_ref / (P_fuel_chem + 1e-12)
+        split = self.arch_power_split(arch, P_shaft_ref, 0.0, altitude_m, ratings=ratings)
+        P_chem = split["fuel_flow_kg_s"] * self.FUEL_LHV[self.ARCH_NAMES.index(arch)]
+        return P_shaft_ref / (P_chem + 1e-12)
 
     def blend_fuel_efficiency(self, weights: np.ndarray, P_shaft_ref: Any,
-                              altitude_m: Any, eta_fallback: float = 0.30) -> Any:
+                              altitude_m: Any, eta_fallback: float = 0.30,
+                              ratings: Optional[Sequence[Optional[Dict[str, Any]]]] = None) -> Any:
         """
-        Blended fuel-path efficiency [-], consistent with `blend_fuel_lhv`.
-
-        Weighted by w_i*LHV_i rather than by w_i alone. The consumer
-        computes usable shaft energy as
-
-            m_fuel * blend_fuel_lhv(w) * blend_fuel_efficiency(w)
-
-        and this weighting is exactly what makes that product equal
-        ``m_fuel * sum_i w_i * LHV_i * eta_i`` -- the physically right
-        blend -- at EVERY weight vector, not just at the one-hot vertices
-        the discreteness penalty eventually drives to. A plain w-weighted
-        mean of eta_i would be correct only once the relaxation had
-        converged, and wrong everywhere the optimizer actually searches.
-
-        The denominator cannot vanish: every FUEL_LHV entry is positive
-        and the softmax weights sum to 1.
+        Blended fuel-path efficiency, weighted by w_i*LHV_i so that
+        ``m * blend_fuel_lhv * blend_fuel_efficiency == m * sum w_i LHV_i eta_i``.
         """
-        etas = [self.arch_fuel_efficiency(a, P_shaft_ref, altitude_m, eta_fallback)
-                for a in self.ARCH_NAMES]
+        ratings = ratings or [None] * len(self.ARCH_NAMES)
+        etas = [self.arch_fuel_efficiency(a, P_shaft_ref, altitude_m, eta_fallback,
+                                          ratings=ratings[i])
+                for i, a in enumerate(self.ARCH_NAMES)]
         wl = weights * self.FUEL_LHV
         return sum(x * e for x, e in zip(wl, etas)) / np.sum(wl)
 
     def blend_propulsion_mass(self, weights: np.ndarray) -> Any:
-        """Blended propulsion dry mass [kg]."""
+        """Blended preset propulsion dry mass [kg] (legacy presets)."""
         masses = np.array([self.prop_systems[a].total_mass for a in self.ARCH_NAMES])
         return np.sum(weights * masses)
 
     def blend_fuel_lhv(self, weights: np.ndarray) -> Any:
-        """
-        Blended fuel lower heating value [J/kg].
-
-        Architectures burn physically different fuel: index 5 (fuel cell)
-        is hydrogen at 120 MJ/kg, the rest are hydrocarbon at ~43 MJ/kg.
-        Blending the LHV keeps the energy objective consistent with the
-        blended fuel flow.
-        """
+        """Blended fuel lower heating value [J/kg]."""
         return np.sum(weights * self.FUEL_LHV)

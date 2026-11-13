@@ -141,6 +141,11 @@ class ASBGeometryComp(om.ExplicitComponent):
         self.add_output("V_h", val=0.5,
                         desc="Horizontal tail volume coefficient, from where "
                              "the tail actually sits")
+        self.add_output("wetted_tail", val=0.16, units="m**2",
+                        desc="Measured wetted area of both tail surfaces")
+        self.add_output("chord_tail", val=0.1, units="m")
+        self.add_output("boom_length", val=0.9, units="m")
+        self.add_output("wetted_booms", val=0.15, units="m**2")
 
         # Finite difference, not complex step: AeroSandbox calls arctan2,
         # which raises TypeError on complex input.
@@ -176,6 +181,14 @@ class ASBGeometryComp(om.ExplicitComponent):
         outputs["rotor_diameter"] = rotor.diameter_m
         outputs["A_rotor"] = rotor.disk_area_total_m2
         outputs["V_h"] = (tail.S_h * tail.l_t) / (wing.S * wing.chord_mean)
+        outputs["wetted_tail"] = float(sum(w.area("wetted") for w in airplane.wings[1:]))
+        outputs["chord_tail"] = tail.horizontal_tail.chord_mean
+
+        from hpraptor.m2_geometry.rotor import boom_layout
+        boom = boom_layout(rotor.diameter_m, wing.span, wing.chord_root,
+                           fuselage.diameter_m, inputs["m_tow"][0])
+        outputs["boom_length"] = boom.boom_length_m
+        outputs["wetted_booms"] = boom.wetted_area_m2
 
 
 class ASBAeroComp(om.ExplicitComponent):
@@ -216,6 +229,9 @@ class ASBAeroComp(om.ExplicitComponent):
         self.add_output("L_D", val=17.0)
         self.add_output("D_cruise", val=6.0, units="N")
         self.add_output("alpha_trim", val=3.0, units="deg")
+        self.add_output("C_D0_vtol", val=0.005,
+                        desc="Boom + stopped-rotor drag added to AeroBuildup, "
+                             "which models neither")
         self.add_output("g1_cl_margin", val=-0.3,
                         desc="C_L_cruise/(0.8 C_L_max) - 1; <= 0 keeps stall margin")
 
@@ -229,10 +245,21 @@ class ASBAeroComp(om.ExplicitComponent):
         V = inputs["V_cruise"][0]
         h = inputs["altitude"][0]
 
-        airplane, wing, _, _, _ = _assemble(
+        airplane, wing, fuselage, _, rotor = _assemble(
             m_tow, inputs["wing_loading"][0], inputs["AR"][0],
             inputs["disk_loading"][0],
             taper_ratio=inputs["taper_ratio"][0])
+
+        # The VTOL system, on the same correlation as the analytical path.
+        from hpraptor.m2_geometry.rotor import boom_layout
+        from hpraptor.m4_aero.parasite_drag import (
+            parasite_cd0_components, vtol_system_components)
+        boom = boom_layout(rotor.diameter_m, wing.span, wing.chord_root,
+                           fuselage.diameter_m, m_tow)
+        dCD0 = float(parasite_cd0_components(
+            wing.S, vtol_system_components(boom.wetted_area_m2, boom.boom_length_m,
+                                           rotor.disk_area_total_m2, rotor.diameter_m),
+            V, h))
 
         atmos = asb.Atmosphere(altitude=h)
         rho = float(atmos.density())
@@ -264,11 +291,11 @@ class ASBAeroComp(om.ExplicitComponent):
         # Interpolate to the alpha that trims. np.interp needs an increasing
         # x, and the lift curve is monotonic over this bracket.
         alpha_trim = float(np.interp(CL_needed, CL_curve, alphas))
-        CD = float(np.interp(alpha_trim, alphas, CD_curve))
+        CD = float(np.interp(alpha_trim, alphas, CD_curve)) + dCD0
 
         # Zero-lift drag from the curve's own minimum, so C_D0 means the same
         # thing it does in the analytical polar.
-        CD0 = float(np.min(CD_curve))
+        CD0 = float(np.min(CD_curve)) + dCD0
 
         outputs["C_L_cruise"] = CL_needed
         outputs["C_D_cruise"] = CD
@@ -276,4 +303,5 @@ class ASBAeroComp(om.ExplicitComponent):
         outputs["L_D"] = CL_needed / max(CD, 1e-9)
         outputs["D_cruise"] = q * wing.S * CD
         outputs["alpha_trim"] = alpha_trim
+        outputs["C_D0_vtol"] = dCD0
         outputs["g1_cl_margin"] = CL_needed / (0.8 * self.options["CL_max"]) - 1.0

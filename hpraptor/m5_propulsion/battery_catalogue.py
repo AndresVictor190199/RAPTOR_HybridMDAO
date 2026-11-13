@@ -66,6 +66,11 @@ class CellSpec:
     mass_kg: float
     max_c_discharge: float
     note: str = ""
+    #: DC internal resistance of one cell [ohm]. Sets the discharge
+    #: efficiency through ``rotor_power.battery_discharge_efficiency``: the
+    #: hover peak that sizes a VTOL pack is exactly where I^2 R losses are
+    #: largest, so a pack model without them flatters the VTOL phases.
+    r_internal_ohm: float = 0.003
 
     @property
     def energy_wh(self) -> float:
@@ -97,24 +102,28 @@ CATALOGUE: Dict[str, CellSpec] = {
         chemistry=CellChemistry.LI_ION_NMC,
         capacity_ah=3.5, voltage_nom_v=3.6, mass_kg=0.048, max_c_discharge=2.0,
         note="Best Wh/kg, poorest C-rate. Energy-limited missions only.",
+        r_internal_ohm=0.030,
     ),
     "li_ion_21700_balanced": CellSpec(
         name="21700 cylindrical, balanced Li-ion",
         chemistry=CellChemistry.LI_ION_NMC,
         capacity_ah=5.0, voltage_nom_v=3.6, mass_kg=0.070, max_c_discharge=3.0,
         note="The usual compromise for long-endurance electric UAVs.",
+        r_internal_ohm=0.018,
     ),
     "lipo_pouch_high_power": CellSpec(
         name="LiPo pouch, high-power",
         chemistry=CellChemistry.LIPO,
         capacity_ah=5.0, voltage_nom_v=3.7, mass_kg=0.105, max_c_discharge=25.0,
         note="Hover-capable C-rate at a large energy penalty.",
+        r_internal_ohm=0.002,
     ),
     "lipo_pouch_balanced": CellSpec(
         name="LiPo pouch, balanced",
         chemistry=CellChemistry.LIPO,
         capacity_ah=6.0, voltage_nom_v=3.7, mass_kg=0.108, max_c_discharge=10.0,
         note="Default for VTOL: enough C-rate for hover, decent Wh/kg.",
+        r_internal_ohm=0.003,
     ),
 }
 
@@ -152,6 +161,17 @@ def pack_energy_wh(mass_kg, cell: CellSpec,
     differentiate through with complex step.
     """
     return mass_kg * pack_specific_energy(cell, overhead)
+
+
+def pack_cell_count(mass_kg, cell: CellSpec,
+                    overhead: float = DEFAULT_PACK_OVERHEAD):
+    """
+    Continuous (non-integer) number of cells in a pack of the given mass.
+
+    Used for the per-cell power that sets discharge efficiency; the integer
+    realisation is ``snap_to_pack``'s job, after the optimization.
+    """
+    return mass_kg * (1.0 - overhead) / cell.mass_kg
 
 
 def pack_power_limit_w(mass_kg, cell: CellSpec,

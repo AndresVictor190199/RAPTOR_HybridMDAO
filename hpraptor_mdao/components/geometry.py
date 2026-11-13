@@ -12,7 +12,7 @@ import openmdao.api as om
 
 from hpraptor.m2_geometry.planform import WingPlanform
 from hpraptor.m2_geometry.fuselage import estimate_fuselage_geometry
-from hpraptor.m2_geometry.rotor import size_rotors_from_disk_loading
+from hpraptor.m2_geometry.rotor import size_rotors_from_disk_loading, boom_layout
 from hpraptor.m2_geometry.tail_sizing import size_tail_from_wing
 
 G = 9.80665
@@ -57,6 +57,16 @@ class GeometryComp(om.ExplicitComponent):
         self.add_output("S_h", val=0.09, units="m**2", desc="Horizontal tail area")
         self.add_output("S_v", val=0.07, units="m**2", desc="Vertical tail area")
         self.add_output("tail_arm", val=1.07, units="m")
+        # Consumed by the drag buildup. The tail areas used to be computed
+        # here and then read by nothing, so the tail cost no drag.
+        self.add_output("wetted_tail", val=0.16, units="m**2",
+                        desc="Both faces of horizontal + vertical tail")
+        self.add_output("chord_tail", val=0.1, units="m",
+                        desc="Horizontal-tail mean chord, for its Reynolds number")
+        # The VTOL system's cruise drag: two booms in the H layout every
+        # consumer shares (m2_geometry.rotor.boom_layout).
+        self.add_output("boom_length", val=0.9, units="m")
+        self.add_output("wetted_booms", val=0.15, units="m**2")
 
         self.declare_partials("*", "*", method="cs")
 
@@ -88,3 +98,11 @@ class GeometryComp(om.ExplicitComponent):
         outputs["S_h"] = tail.S_h
         outputs["S_v"] = tail.S_v
         outputs["tail_arm"] = tail.l_t
+        outputs["wetted_tail"] = (tail.horizontal_tail.wetted_area
+                                  + tail.vertical_tail.wetted_area)
+        outputs["chord_tail"] = tail.horizontal_tail.chord_mean
+
+        boom = boom_layout(rotor.diameter_m, wing.span, wing.chord_root,
+                           fuse.diameter_m, m_tow)
+        outputs["boom_length"] = boom.boom_length_m
+        outputs["wetted_booms"] = boom.wetted_area_m2
